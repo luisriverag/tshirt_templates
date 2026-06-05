@@ -29,6 +29,13 @@
                 {% endfor %}
               </select>
             </label>
+            <label>Orientation
+              <select name="orientation">
+                {% for value, label in orientations.items() %}
+                  <option value="{{ value }}">{{ label }}</option>
+                {% endfor %}
+              </select>
+            </label>
             <label>Placement
               <select name="mode">
                 {% for value, label in modes.items() %}
@@ -51,7 +58,8 @@
             <label class="inline"><input type="checkbox" name="sides" value="front" checked> Front</label>
             <label class="inline"><input type="checkbox" name="sides" value="back" checked> Back</label>
           </fieldset>
-          <label class="inline"><input type="checkbox" name="mirror" checked> Mirror PDF for sublimation transfer</label>
+          <label class="inline"><input type="checkbox" name="mirror" value="on" checked> Mirror PDF for sublimation transfer</label>
+          <input type="hidden" name="mirror" value="off">
           <label>Upload badge artwork
             <input type="file" name="uploads" multiple accept=".svg,.png,.jpg,.jpeg,image/svg+xml,image/png,image/jpeg">
             <small>Uploaded SVG, PNG, or JPG files are saved locally and included in this template.</small>

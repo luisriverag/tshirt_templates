@@ -34,7 +34,7 @@
       </div>
 
       <form method="post" action="/pdf" class="actions sticky-actions">
-        {% for key in ['page_size', 'mode', 'badge_size', 'spacing', 'copies', 'mirror'] %}
+        {% for key in ['page_size', 'orientation', 'mode', 'badge_size', 'spacing', 'copies', 'mirror'] %}
           {% if form.get(key) %}<input type="hidden" name="{{ key }}" value="{{ form.get(key) }}">{% endif %}
         {% endfor %}
         {% for side in form.getlist('sides') %}<input type="hidden" name="sides" value="{{ side }}">{% endfor %}

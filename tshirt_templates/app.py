@@ -16,12 +16,20 @@ LAYOUT_MODES = {
     "rows": "Staggered rows",
     "diagonal": "Diagonal sash",
     "scatter": "Organic scatter",
+    "circle": "Circle wreath",
+    "spiral": "Spiral trail",
+    "wave": "Wave ribbon",
     "border": "Border frame",
+    "m-pixels": "M pixel shape",
 }
 PAGE_SIZES = {
     "letter": "US Letter",
     "a4": "A4",
     "a3": "A3",
+}
+ORIENTATIONS = {
+    "portrait": "Portrait",
+    "landscape": "Landscape",
 }
 
 
@@ -40,6 +48,7 @@ def create_app() -> Flask:
             selected_ids=selected_ids,
             modes=LAYOUT_MODES,
             page_sizes=PAGE_SIZES,
+            orientations=ORIENTATIONS,
         )
 
     @app.post("/refresh")
@@ -100,6 +109,7 @@ def create_app() -> Flask:
             badge_ids=badge_ids,
             sides=options.sides,
             page_size=options.page_size,
+            orientation=options.orientation,
             mode=options.mode,
             badge_size_inches=options.badge_size_inches,
             spacing_inches=options.spacing_inches,

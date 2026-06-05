@@ -13,8 +13,12 @@ The app discovers badge image assets from the GitHub repository, lets you select
   - **Rows**: staggered horizontal bands.
   - **Diagonal**: sash-style diagonal placement.
   - **Scatter**: deterministic pseudo-random distribution.
+  - **Circle wreath**: badges arranged around an oval ring.
+  - **Spiral trail**: badges flowing outward from the panel center.
+  - **Wave ribbon**: badges following a horizontal sine-wave band.
   - **Border**: perimeter frame layout for collar/sleeve-style badge accents.
-- Configurable page size, badge size, spacing, copies per badge, mirroring, and panel selection, with invalid form values safely normalized.
+  - **M pixel shape**: pixel-art capital M that repeats the selected badges as mosaic pixels.
+- Configurable page size, page orientation, badge size, spacing, copies per badge, mirroring, and panel selection, with invalid form values safely normalized.
 - User uploads for additional SVG/PNG/JPG badge artwork stored under the Flask `instance/uploads/` folder.
 - Optional mirroring for sublimation transfer workflows.
 - Browser preview plus PDF download.
