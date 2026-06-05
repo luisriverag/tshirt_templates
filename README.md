@@ -18,10 +18,11 @@ The app discovers badge image assets from the GitHub repository, lets you select
   - **Wave ribbon**: badges following a horizontal sine-wave band.
   - **Border**: perimeter frame layout for collar/sleeve-style badge accents.
   - **M pixel shape**: pixel-art capital M that repeats the selected badges as mosaic pixels.
-- Configurable page size, page orientation, badge size, spacing, copies per badge, mirroring, and panel selection, with invalid form values safely normalized.
+- Configurable page size (A4 by default), page orientation, centimeter/inch units, badge size presets, spacing presets, copies per badge, mirroring, and panel selection, with invalid form values safely normalized.
 - User uploads for additional SVG/PNG/JPG badge artwork stored under the Flask `instance/uploads/` folder.
 - Optional mirroring for sublimation transfer workflows.
-- Browser preview plus PDF download.
+- Optional MakeSpace Madrid logo element with configurable size.
+- MakeSpace-inspired black/yellow monospace UI theme plus browser preview with manual drag/coordinate placement adjustments and PDF download.
 
 ## Quick start
 
@@ -33,6 +34,12 @@ flask --app tshirt_templates.app run --debug
 ```
 
 Open <http://127.0.0.1:5000>.
+
+## Documentation
+
+- [`docs/SPECS.md`](docs/SPECS.md): Technical specifications for the current application.
+- [`docs/APIDOCS.md`](docs/APIDOCS.md): Initial API/MCP endpoints and future integration details.
+- [`docs/IDEAS.md`](docs/IDEAS.md): Potential product, layout, API, testing, and accessibility improvements.
 
 ## Testing
 

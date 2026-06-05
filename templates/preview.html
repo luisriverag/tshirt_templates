@@ -10,22 +10,30 @@
     <main class="shell">
       <a class="back-link" href="/">← Adjust settings</a>
       <section class="hero compact">
-        <p class="eyebrow">Preview</p>
+        <div class="brand-lockup">
+          <img class="brand-mark" src="https://raw.githubusercontent.com/makespacemadrid/makespacemadrid.github.io/main/assets/images/logo/makespace-bk.svg" alt="MakeSpace Madrid logo">
+          <p class="eyebrow">Preview</p>
+        </div>
         <h1>{{ form.get('mode', 'grid')|title }} placement</h1>
-        <p>{{ badges|length }} selected badges laid out across {{ layouts|length }} panel(s).</p>
+        <p>{{ badges|length }} selected badges laid out across {{ layouts|length }} panel(s). Drag badges on the sheet or edit their coordinates below before downloading.</p>
       </section>
 
       <div class="preview-wrap">
         <svg class="page-preview" viewBox="0 0 {{ page_width }} {{ page_height }}" role="img" aria-label="PDF template preview">
           <rect x="0" y="0" width="{{ page_width }}" height="{{ page_height }}" fill="white"/>
           {% for layout in layouts %}
+            {% set layout_index = loop.index0 %}
             <rect class="panel-outline" x="{{ layout.x }}" y="{{ page_height - layout.y - layout.height }}" width="{{ layout.width }}" height="{{ layout.height }}" rx="12"/>
             <text x="{{ layout.x + 10 }}" y="{{ page_height - layout.y - layout.height + 22 }}" class="panel-title">{{ layout.side|upper }}</text>
             {% for placement in layout.placements %}
+              {% set placement_index = loop.index0 %}
               {% set badge = badge_lookup.get(placement.badge_id) %}
               {% if badge %}
-                <g transform="translate({{ placement.x + placement.width / 2 }} {{ page_height - placement.y - placement.height / 2 }}) rotate({{ -placement.rotation }})">
-                  <image href="{{ badge.raw_url }}" x="{{ -placement.width / 2 }}" y="{{ -placement.height / 2 }}" width="{{ placement.width }}" height="{{ placement.height }}" preserveAspectRatio="xMidYMid meet"/>
+                <g class="draggable-badge" tabindex="0" role="button" aria-label="Move {{ badge.name }}" data-key="{{ layout_index }}_{{ placement_index }}" data-x="{{ placement.x }}" data-y="{{ page_height - placement.y - placement.height }}" data-width="{{ placement.width }}" data-height="{{ placement.height }}" data-rotation="{{ -placement.rotation }}">
+                  <title>{{ badge.name }}</title>
+                  <g class="badge-transform" transform="translate({{ placement.x + placement.width / 2 }} {{ page_height - placement.y - placement.height / 2 }}) rotate({{ -placement.rotation }})">
+                    <image href="{{ badge.raw_url }}" x="{{ -placement.width / 2 }}" y="{{ -placement.height / 2 }}" width="{{ placement.width }}" height="{{ placement.height }}" preserveAspectRatio="xMidYMid meet"/>
+                  </g>
                 </g>
               {% endif %}
             {% endfor %}
@@ -33,14 +41,136 @@
         </svg>
       </div>
 
-      <form method="post" action="/pdf" class="actions sticky-actions">
-        {% for key in ['page_size', 'orientation', 'mode', 'badge_size', 'spacing', 'copies', 'mirror'] %}
+      <form method="post" action="/pdf" class="sticky-actions" id="manual-layout-form">
+        <section class="panel manual-panel">
+          <div class="section-heading">
+            <h2>Manual placement</h2>
+            <span>Coordinates use {{ unit }} from the page’s top-left corner.</span>
+          </div>
+          <p class="hint">Drag a badge in the preview or type X/Y/rotation values. Use the selected unit for fine alignment; the automatic layouts still use print-safe size and spacing presets.</p>
+          <div class="coordinate-table-wrap">
+            <table class="coordinate-table">
+              <thead>
+                <tr>
+                  <th>Panel</th>
+                  <th>Badge</th>
+                  <th>X</th>
+                  <th>Y</th>
+                  <th>Rotation</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for layout in layouts %}
+                  {% set layout_index = loop.index0 %}
+                  {% for placement in layout.placements %}
+                    {% set placement_index = loop.index0 %}
+                    {% set badge = badge_lookup.get(placement.badge_id) %}
+                    {% if badge %}
+                      <tr>
+                        <td>{{ layout.side|title }}</td>
+                        <td>{{ badge.name }}</td>
+                        <td><input class="manual-input" data-field="x" data-key="{{ layout_index }}_{{ placement_index }}" type="number" name="manual_{{ layout_index }}_{{ placement_index }}_x" step="0.1" value="{{ '%.2f'|format(placement.x / points_per_unit) }}"></td>
+                        <td><input class="manual-input" data-field="y" data-key="{{ layout_index }}_{{ placement_index }}" type="number" name="manual_{{ layout_index }}_{{ placement_index }}_y" step="0.1" value="{{ '%.2f'|format((page_height - placement.y - placement.height) / points_per_unit) }}"></td>
+                        <td><input class="manual-input" data-field="rotation" data-key="{{ layout_index }}_{{ placement_index }}" type="number" name="manual_{{ layout_index }}_{{ placement_index }}_rotation" step="1" value="{{ '%.1f'|format(placement.rotation) }}"></td>
+                      </tr>
+                    {% endif %}
+                  {% endfor %}
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        {% for key in ['page_size', 'orientation', 'mode', 'order', 'unit', 'badge_size', 'spacing', 'include_logo', 'logo_size', 'copies', 'mirror'] %}
           {% if form.get(key) %}<input type="hidden" name="{{ key }}" value="{{ form.get(key) }}">{% endif %}
         {% endfor %}
         {% for side in form.getlist('sides') %}<input type="hidden" name="sides" value="{{ side }}">{% endfor %}
         {% for badge_id in selected_ids %}<input type="hidden" name="badges" value="{{ badge_id }}">{% endfor %}
-        <button type="submit">Download mirrored PDF</button>
+        <div class="actions">
+          <button type="submit">Download mirrored PDF</button>
+        </div>
       </form>
     </main>
+
+    <script>
+      const svg = document.querySelector('.page-preview');
+      const pointsPerUnit = {{ points_per_unit }};
+      const inputs = new Map();
+      document.querySelectorAll('.manual-input').forEach((input) => {
+        const key = input.dataset.key;
+        if (!inputs.has(key)) inputs.set(key, {});
+        inputs.get(key)[input.dataset.field] = input;
+        input.addEventListener('input', () => updateBadgeFromInputs(key));
+      });
+
+      function setBadgeTransform(badge, x, y, rotation) {
+        const width = Number(badge.dataset.width);
+        const height = Number(badge.dataset.height);
+        badge.dataset.x = x;
+        badge.dataset.y = y;
+        badge.dataset.rotation = -rotation;
+        badge.querySelector('.badge-transform').setAttribute(
+          'transform',
+          `translate(${x + width / 2} ${y + height / 2}) rotate(${-rotation})`
+        );
+      }
+
+      function updateBadgeFromInputs(key) {
+        const badge = document.querySelector(`.draggable-badge[data-key="${key}"]`);
+        const group = inputs.get(key);
+        if (!badge || !group) return;
+        setBadgeTransform(
+          badge,
+          (Number(group.x.value) || 0) * pointsPerUnit,
+          (Number(group.y.value) || 0) * pointsPerUnit,
+          Number(group.rotation.value) || 0
+        );
+      }
+
+      function updateInputsFromBadge(badge) {
+        const group = inputs.get(badge.dataset.key);
+        if (!group) return;
+        group.x.value = (Number(badge.dataset.x) / pointsPerUnit).toFixed(2);
+        group.y.value = (Number(badge.dataset.y) / pointsPerUnit).toFixed(2);
+        group.rotation.value = (-Number(badge.dataset.rotation)).toFixed(1);
+      }
+
+      function svgPoint(event) {
+        const point = svg.createSVGPoint();
+        point.x = event.clientX;
+        point.y = event.clientY;
+        return point.matrixTransform(svg.getScreenCTM().inverse());
+      }
+
+      let drag = null;
+      document.querySelectorAll('.draggable-badge').forEach((badge) => {
+        badge.addEventListener('pointerdown', (event) => {
+          event.preventDefault();
+          const point = svgPoint(event);
+          drag = {
+            badge,
+            offsetX: point.x - Number(badge.dataset.x),
+            offsetY: point.y - Number(badge.dataset.y),
+          };
+          badge.setPointerCapture(event.pointerId);
+          badge.classList.add('dragging');
+        });
+      });
+
+      svg.addEventListener('pointermove', (event) => {
+        if (!drag) return;
+        const point = svgPoint(event);
+        const x = point.x - drag.offsetX;
+        const y = point.y - drag.offsetY;
+        setBadgeTransform(drag.badge, x, y, -Number(drag.badge.dataset.rotation));
+        updateInputsFromBadge(drag.badge);
+      });
+
+      svg.addEventListener('pointerup', () => {
+        if (!drag) return;
+        drag.badge.classList.remove('dragging');
+        drag = null;
+      });
+    </script>
   </body>
 </html>

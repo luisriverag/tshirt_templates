@@ -48,6 +48,23 @@ def _is_badge_asset(path: str) -> bool:
     return normalized.endswith(IMAGE_EXTENSIONS) and not normalized.startswith(".")
 
 
+def badge_category(badge: Badge) -> str:
+    """Return a badge category derived from its containing path."""
+
+    return badge.path.rsplit("/", 1)[0] if "/" in badge.path else "Uncategorized"
+
+
+def order_badges(badges: Iterable[Badge], order: str) -> list[Badge]:
+    """Return badges in the requested display/layout order."""
+
+    badge_list = list(badges)
+    if order == "alphabetical":
+        return sorted(badge_list, key=lambda badge: (badge.name.lower(), badge.path.lower()))
+    if order == "category":
+        return sorted(badge_list, key=lambda badge: (badge_category(badge).lower(), badge.name.lower(), badge.path.lower()))
+    return badge_list
+
+
 def _sort_badges(badges: Iterable[Badge]) -> list[Badge]:
     return sorted(badges, key=lambda badge: (badge.name.lower(), badge.path.lower()))
 
