@@ -39,10 +39,10 @@ class PanelLayout:
     placements: list[Placement]
 
 
-def page_size_points(page_size: str, orientation: str = "portrait") -> tuple[float, float]:
+def page_size_points(page_size: str = "a4", orientation: str = "portrait") -> tuple[float, float]:
     """Return a supported PDF page size in points for the requested orientation."""
 
-    width, height = PAGE_SIZES.get(page_size, PAGE_SIZES["letter"])
+    width, height = PAGE_SIZES.get(page_size, PAGE_SIZES["a4"])
     short_side, long_side = sorted((width, height))
     if orientation == "landscape":
         return long_side, short_side
@@ -403,7 +403,7 @@ def _m_pixel_positions(
 def place_badges(
     badge_ids: list[str],
     sides: list[str],
-    page_size: str = "letter",
+    page_size: str = "a4",
     mode: str = "grid",
     orientation: str = "portrait",
     badge_size_inches: float = 1.35,

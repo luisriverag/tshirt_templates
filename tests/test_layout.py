@@ -2,7 +2,7 @@ from tshirt_templates.layout import compute_panels, expand_badges, page_size_poi
 
 
 def test_page_size_points_applies_orientation():
-    assert page_size_points("letter") == (612.0, 792.0)
+    assert page_size_points() == (595.28, 841.89)
     assert page_size_points("letter", "portrait") == (612.0, 792.0)
     assert page_size_points("letter", "landscape") == (792.0, 612.0)
 
@@ -22,11 +22,10 @@ def test_grid_layout_places_each_copy_on_each_selected_panel():
     page_size, layouts = place_badges(
         badge_ids=["alpha", "beta"],
         sides=["front", "back"],
-        page_size="letter",
         mode="grid",
         copies=2,
     )
-    assert page_size == (612.0, 792.0)
+    assert page_size == (595.28, 841.89)
     assert len(layouts) == 2
     assert all(len(layout.placements) == 4 for layout in layouts)
 
