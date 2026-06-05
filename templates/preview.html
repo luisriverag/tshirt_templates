@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Preview t-shirt template</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+  </head>
+  <body>
+    <main class="shell">
+      <a class="back-link" href="/">← Adjust settings</a>
+      <section class="hero compact">
+        <p class="eyebrow">Preview</p>
+        <h1>{{ form.get('mode', 'grid')|title }} placement</h1>
+        <p>{{ badges|length }} selected badges laid out across {{ layouts|length }} panel(s).</p>
+      </section>
+
+      <div class="preview-wrap">
+        <svg class="page-preview" viewBox="0 0 {{ page_width }} {{ page_height }}" role="img" aria-label="PDF template preview">
+          <rect x="0" y="0" width="{{ page_width }}" height="{{ page_height }}" fill="white"/>
+          {% for layout in layouts %}
+            <rect class="panel-outline" x="{{ layout.x }}" y="{{ page_height - layout.y - layout.height }}" width="{{ layout.width }}" height="{{ layout.height }}" rx="12"/>
+            <text x="{{ layout.x + 10 }}" y="{{ page_height - layout.y - layout.height + 22 }}" class="panel-title">{{ layout.side|upper }}</text>
+            {% for placement in layout.placements %}
+              {% set badge = badge_lookup.get(placement.badge_id) %}
+              {% if badge %}
+                <g transform="translate({{ placement.x + placement.width / 2 }} {{ page_height - placement.y - placement.height / 2 }}) rotate({{ -placement.rotation }})">
+                  <image href="{{ badge.raw_url }}" x="{{ -placement.width / 2 }}" y="{{ -placement.height / 2 }}" width="{{ placement.width }}" height="{{ placement.height }}" preserveAspectRatio="xMidYMid meet"/>
+                </g>
+              {% endif %}
+            {% endfor %}
+          {% endfor %}
+        </svg>
+      </div>
+
+      <form method="post" action="/pdf" class="actions sticky-actions">
+        {% for key in ['page_size', 'mode', 'badge_size', 'spacing', 'copies', 'mirror'] %}
+          {% if form.get(key) %}<input type="hidden" name="{{ key }}" value="{{ form.get(key) }}">{% endif %}
+        {% endfor %}
+        {% for side in form.getlist('sides') %}<input type="hidden" name="sides" value="{{ side }}">{% endfor %}
+        {% for badge_id in selected_ids %}<input type="hidden" name="badges" value="{{ badge_id }}">{% endfor %}
+        <button type="submit">Download mirrored PDF</button>
+      </form>
+    </main>
+  </body>
+</html>

@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>T-shirt sublimation badge templates</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+  </head>
+  <body>
+    <main class="shell">
+      <section class="hero">
+        <p class="eyebrow">MakeSpace Madrid open badges → sublimation sheets</p>
+        <h1>Generate front & back t-shirt badge PDF templates</h1>
+        <p>Select badges, choose an automatic placement mode, preview the sheet, then download a print-ready PDF.</p>
+      </section>
+
+      <form class="refresh-form" method="post" action="/refresh">
+        <button type="submit" class="secondary-button">Refresh badges from GitHub</button>
+      </form>
+
+      <form class="generator" method="post" action="/preview" enctype="multipart/form-data">
+        <section class="panel controls">
+          <h2>Template options</h2>
+          <div class="control-grid">
+            <label>Page size
+              <select name="page_size">
+                {% for value, label in page_sizes.items() %}
+                  <option value="{{ value }}">{{ label }}</option>
+                {% endfor %}
+              </select>
+            </label>
+            <label>Placement
+              <select name="mode">
+                {% for value, label in modes.items() %}
+                  <option value="{{ value }}">{{ label }}</option>
+                {% endfor %}
+              </select>
+            </label>
+            <label>Badge size (in)
+              <input type="number" name="badge_size" min="0.35" max="4" step="0.05" value="1.35">
+            </label>
+            <label>Spacing (in)
+              <input type="number" name="spacing" min="0" max="2" step="0.05" value="0.18">
+            </label>
+            <label>Copies per badge
+              <input type="number" name="copies" min="1" max="24" step="1" value="1">
+            </label>
+          </div>
+          <fieldset>
+            <legend>Panels</legend>
+            <label class="inline"><input type="checkbox" name="sides" value="front" checked> Front</label>
+            <label class="inline"><input type="checkbox" name="sides" value="back" checked> Back</label>
+          </fieldset>
+          <label class="inline"><input type="checkbox" name="mirror" checked> Mirror PDF for sublimation transfer</label>
+          <label>Upload badge artwork
+            <input type="file" name="uploads" multiple accept=".svg,.png,.jpg,.jpeg,image/svg+xml,image/png,image/jpeg">
+            <small>Uploaded SVG, PNG, or JPG files are saved locally and included in this template.</small>
+          </label>
+        </section>
+
+        <section class="panel">
+          <div class="section-heading">
+            <h2>Badges</h2>
+            <span>{{ badges|length }} image assets</span>
+          </div>
+          <div class="badge-grid">
+            {% for badge in badges %}
+              <label class="badge-card">
+                <input type="checkbox" name="badges" value="{{ badge.id }}" {% if badge.id in selected_ids %}checked{% endif %}>
+                <span class="thumb"><img src="{{ badge.raw_url }}" alt="{{ badge.name }}" loading="lazy"></span>
+                <strong>{{ badge.name }}</strong>
+                <small>{{ badge.path }}</small>
+              </label>
+            {% endfor %}
+          </div>
+        </section>
+
+        <div class="actions">
+          <button type="submit">Preview template</button>
+          <button type="submit" formaction="/pdf">Download PDF</button>
+        </div>
+      </form>
+    </main>
+  </body>
+</html>
