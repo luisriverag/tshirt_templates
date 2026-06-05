@@ -27,6 +27,13 @@ def test_index_renders_badge_picker(monkeypatch):
 
     assert response.status_code == 200
     assert b"Generate front & back t-shirt badge PDF templates" in response.data
+    assert b"M pixel shape" in response.data
+    assert b"Circle wreath" in response.data
+    assert b"Spiral trail" in response.data
+    assert b"Wave ribbon" in response.data
+    assert b"Portrait" in response.data
+    assert b"Landscape" in response.data
+    assert b'name="mirror" value="off"' in response.data
     assert b"Demo Badge" in response.data
 
 
@@ -41,6 +48,7 @@ def test_preview_renders_selected_layout(monkeypatch):
             "sides": ["front", "back"],
             "mode": "grid",
             "page_size": "letter",
+            "orientation": "landscape",
             "badge_size": "1.25",
             "spacing": "0.2",
             "copies": "2",
@@ -49,16 +57,19 @@ def test_preview_renders_selected_layout(monkeypatch):
 
     assert response.status_code == 200
     assert b"PDF template preview" in response.data
+    assert b'viewBox="0 0 792.0 612.0"' in response.data
+    assert b'name="orientation" value="landscape"' in response.data
     assert b"FRONT" in response.data
     assert b"BACK" in response.data
 
 
-def test_pdf_route_returns_pdf_download(monkeypatch):
+def test_pdf_route_returns_mirrored_pdf_download_by_default(monkeypatch):
+    calls = []
     monkeypatch.setattr("tshirt_templates.badges.list_badges", lambda: [DEMO_BADGE])
     monkeypatch.setitem(
         sys.modules,
         "tshirt_templates.pdf",
-        SimpleNamespace(render_pdf=lambda *args, **kwargs: b"%PDF-1.4\n%%EOF"),
+        SimpleNamespace(render_pdf=lambda *args, **kwargs: calls.append(kwargs) or b"%PDF-1.4\n%%EOF"),
     )
     app = create_app()
 
@@ -72,7 +83,6 @@ def test_pdf_route_returns_pdf_download(monkeypatch):
             "badge_size": "1.25",
             "spacing": "0.2",
             "copies": "1",
-            "mirror": "on",
         },
     )
 
@@ -80,6 +90,7 @@ def test_pdf_route_returns_pdf_download(monkeypatch):
     assert response.mimetype == "application/pdf"
     assert response.headers["Content-Disposition"] == "attachment; filename=tshirt-badge-template.pdf"
     assert response.data.startswith(b"%PDF")
+    assert calls == [{"mirror": True}]
 
 
 def test_refresh_route_clears_cache_and_redirects(monkeypatch):

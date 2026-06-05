@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from math import ceil, cos, radians, sin, sqrt
+from math import ceil, cos, pi, radians, sin, sqrt
 from random import Random
 
 PAGE_SIZES = {
@@ -39,10 +39,14 @@ class PanelLayout:
     placements: list[Placement]
 
 
-def page_size_points(page_size: str) -> tuple[float, float]:
-    """Return a supported PDF page size in points."""
+def page_size_points(page_size: str, orientation: str = "portrait") -> tuple[float, float]:
+    """Return a supported PDF page size in points for the requested orientation."""
 
-    return PAGE_SIZES.get(page_size, PAGE_SIZES["letter"])
+    width, height = PAGE_SIZES.get(page_size, PAGE_SIZES["letter"])
+    short_side, long_side = sorted((width, height))
+    if orientation == "landscape":
+        return long_side, short_side
+    return short_side, long_side
 
 
 def expand_badges(badge_ids: list[str], copies: int) -> list[str]:
@@ -146,6 +150,14 @@ def _diagonal_positions(ids: list[str], panel: tuple[float, float, float, float]
     return placements
 
 
+def _clamp(value: float, minimum: float, maximum: float) -> float:
+    """Keep a placement coordinate inside a panel range."""
+
+    if maximum < minimum:
+        return minimum
+    return min(max(value, minimum), maximum)
+
+
 def _scatter_positions(ids: list[str], panel: tuple[float, float, float, float], badge_size: float, spacing: float) -> list[Placement]:
     x, y, width, height = panel
     rng = Random("tshirt-template-scatter")
@@ -155,6 +167,98 @@ def _scatter_positions(ids: list[str], panel: tuple[float, float, float, float],
         py = y + rng.random() * max(1, height - badge_size)
         rotation = rng.choice([-18, -10, -6, 0, 6, 10, 18])
         placements.append(Placement(badge_id, px, py, badge_size, badge_size, rotation))
+    return placements
+
+
+def _circle_positions(ids: list[str], panel: tuple[float, float, float, float], badge_size: float, spacing: float) -> list[Placement]:
+    x, y, width, height = panel
+    if not ids:
+        return []
+
+    center_x = x + width / 2
+    center_y = y + height / 2
+    radius_x = max(0.0, width / 2 - badge_size / 2 - spacing)
+    radius_y = max(0.0, height / 2 - badge_size / 2 - spacing)
+    if len(ids) == 1:
+        return [Placement(ids[0], center_x - badge_size / 2, center_y - badge_size / 2, badge_size, badge_size)]
+
+    placements: list[Placement] = []
+    for index, badge_id in enumerate(ids):
+        angle = 2 * pi * index / len(ids) - pi / 2
+        px = center_x + cos(angle) * radius_x - badge_size / 2
+        py = center_y + sin(angle) * radius_y - badge_size / 2
+        placements.append(
+            Placement(
+                badge_id,
+                _clamp(px, x, x + width - badge_size),
+                _clamp(py, y, y + height - badge_size),
+                badge_size,
+                badge_size,
+                angle * 180 / pi + 90,
+            )
+        )
+    return placements
+
+
+def _spiral_positions(ids: list[str], panel: tuple[float, float, float, float], badge_size: float, spacing: float) -> list[Placement]:
+    x, y, width, height = panel
+    if not ids:
+        return []
+
+    center_x = x + width / 2
+    center_y = y + height / 2
+    if len(ids) == 1:
+        return [Placement(ids[0], center_x - badge_size / 2, center_y - badge_size / 2, badge_size, badge_size)]
+
+    max_radius = max(0.0, min(width, height) / 2 - badge_size / 2 - spacing)
+    turns = 1.75
+    placements: list[Placement] = []
+    for index, badge_id in enumerate(ids):
+        progress = index / (len(ids) - 1)
+        angle = turns * 2 * pi * progress - pi / 2
+        radius = max_radius * progress**0.7
+        px = center_x + cos(angle) * radius - badge_size / 2
+        py = center_y + sin(angle) * radius - badge_size / 2
+        placements.append(
+            Placement(
+                badge_id,
+                _clamp(px, x, x + width - badge_size),
+                _clamp(py, y, y + height - badge_size),
+                badge_size,
+                badge_size,
+                angle * 180 / pi,
+            )
+        )
+    return placements
+
+
+def _wave_positions(ids: list[str], panel: tuple[float, float, float, float], badge_size: float, spacing: float) -> list[Placement]:
+    x, y, width, height = panel
+    if not ids:
+        return []
+
+    center_y = y + (height - badge_size) / 2
+    amplitude = max(0.0, (height - badge_size) / 3 - spacing)
+    if len(ids) == 1:
+        return [Placement(ids[0], x + (width - badge_size) / 2, center_y, badge_size, badge_size)]
+
+    span = max(0.0, width - badge_size)
+    placements: list[Placement] = []
+    for index, badge_id in enumerate(ids):
+        progress = index / (len(ids) - 1)
+        angle = 2 * pi * progress
+        px = x + span * progress
+        py = center_y + sin(angle) * amplitude
+        placements.append(
+            Placement(
+                badge_id,
+                _clamp(px, x, x + width - badge_size),
+                _clamp(py, y, y + height - badge_size),
+                badge_size,
+                badge_size,
+                cos(angle) * 14,
+            )
+        )
     return placements
 
 
@@ -211,18 +315,104 @@ def _border_positions(ids: list[str], panel: tuple[float, float, float, float], 
     return placements
 
 
+MIN_M_PIXEL_GRID_SIZE = 5
+
+
+def _m_pixel_slots(cols: int, rows: int) -> list[tuple[int, int]]:
+    """Return row/column slots that draw a blocky capital M."""
+
+    midpoint = max(1, (rows - 1) // 2)
+    slots: list[tuple[int, int]] = []
+    for row in range(rows):
+        diagonal_cols: set[int] = set()
+        if row <= midpoint:
+            diagonal_cols = {
+                round(row * (cols - 1) / (2 * midpoint)),
+                round((cols - 1) - row * (cols - 1) / (2 * midpoint)),
+            }
+        for col in range(cols):
+            if col in {0, cols - 1} or col in diagonal_cols:
+                slots.append((row, col))
+    return slots
+
+
+def _m_pixel_dimensions(minimum_slots: int) -> tuple[int, int, list[tuple[int, int]]]:
+    """Return compact odd grid dimensions with enough M pixels."""
+
+    rows = cols = MIN_M_PIXEL_GRID_SIZE
+    slots = _m_pixel_slots(cols, rows)
+    while len(slots) < minimum_slots:
+        rows += 2
+        cols += 2
+        slots = _m_pixel_slots(cols, rows)
+    return cols, rows, slots
+
+
+def _m_pixel_badge_ids(ids: list[str], slots: int) -> list[str]:
+    """Repeat selected badges so every M pixel receives artwork."""
+
+    if not ids:
+        return []
+    return [ids[index % len(ids)] for index in range(slots)]
+
+
+def _m_pixel_positions(
+    ids: list[str],
+    panel: tuple[float, float, float, float],
+    badge_size: float,
+    spacing: float,
+) -> list[Placement]:
+    x, y, width, height = panel
+    if not ids:
+        return []
+
+    cols, rows, slots = _m_pixel_dimensions(max(len(ids), MIN_M_PIXEL_GRID_SIZE))
+    max_spacing = min(
+        spacing,
+        max(0.0, (width - cols) / max(1, cols - 1)),
+        max(0.0, (height - rows) / max(1, rows - 1)),
+    )
+    pixel_size = max(
+        1.0,
+        min(
+            badge_size,
+            (width - max(0, cols - 1) * max_spacing) / cols,
+            (height - max(0, rows - 1) * max_spacing) / rows,
+        ),
+    )
+    step = pixel_size + max_spacing
+    total_width = cols * pixel_size + max(0, cols - 1) * max_spacing
+    total_height = rows * pixel_size + max(0, rows - 1) * max_spacing
+    start_x = x + max(0, (width - total_width) / 2)
+    top_y = y + height - max(0, (height - total_height) / 2) - pixel_size
+
+    placements: list[Placement] = []
+    for badge_id, (row, col) in zip(_m_pixel_badge_ids(ids, len(slots)), slots):
+        placements.append(
+            Placement(
+                badge_id=badge_id,
+                x=start_x + col * step,
+                y=top_y - row * step,
+                width=pixel_size,
+                height=pixel_size,
+            )
+        )
+    return placements
+
+
 def place_badges(
     badge_ids: list[str],
     sides: list[str],
     page_size: str = "letter",
     mode: str = "grid",
+    orientation: str = "portrait",
     badge_size_inches: float = 1.35,
     spacing_inches: float = 0.18,
     copies: int = 1,
 ) -> tuple[tuple[float, float], list[PanelLayout]]:
     """Compute printable panel layouts for selected badges."""
 
-    page_width, page_height = page_size_points(page_size)
+    page_width, page_height = page_size_points(page_size, orientation)
     badge_size = max(0.35, min(badge_size_inches, 4.0)) * POINTS_PER_INCH
     spacing = max(0.0, min(spacing_inches, 2.0)) * POINTS_PER_INCH
     expanded_ids = expand_badges(badge_ids, copies)
@@ -232,7 +422,11 @@ def place_badges(
         "rows": _rows_positions,
         "diagonal": _diagonal_positions,
         "scatter": _scatter_positions,
+        "circle": _circle_positions,
+        "spiral": _spiral_positions,
+        "wave": _wave_positions,
         "border": _border_positions,
+        "m-pixels": _m_pixel_positions,
     }
     placer = placers.get(mode, _grid_positions)
 

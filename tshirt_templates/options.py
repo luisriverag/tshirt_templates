@@ -8,7 +8,10 @@ from typing import Callable, Mapping
 DEFAULT_SIDES = ("front", "back")
 VALID_SIDES = frozenset(DEFAULT_SIDES)
 VALID_PAGE_SIZES = frozenset({"letter", "a4", "a3"})
-VALID_LAYOUT_MODES = frozenset({"grid", "rows", "diagonal", "scatter", "border"})
+VALID_ORIENTATIONS = frozenset({"portrait", "landscape"})
+VALID_LAYOUT_MODES = frozenset(
+    {"grid", "rows", "diagonal", "scatter", "circle", "spiral", "wave", "border", "m-pixels"}
+)
 
 
 @dataclass(frozen=True)
@@ -17,6 +20,7 @@ class LayoutOptions:
 
     sides: list[str]
     page_size: str = "letter"
+    orientation: str = "portrait"
     mode: str = "grid"
     badge_size_inches: float = 1.35
     spacing_inches: float = 0.18
@@ -24,7 +28,9 @@ class LayoutOptions:
     mirror: bool = True
 
 
-def _truthy(value: str | None) -> bool:
+def _truthy(value: str | None, default: bool = False) -> bool:
+    if value is None:
+        return default
     return value in {"1", "true", "on", "yes"}
 
 
@@ -62,9 +68,10 @@ def parse_layout_options(
     return LayoutOptions(
         sides=_valid_sides(getlist("sides")),
         page_size=_valid_choice(values.get("page_size"), VALID_PAGE_SIZES, "letter"),
+        orientation=_valid_choice(values.get("orientation"), VALID_ORIENTATIONS, "portrait"),
         mode=_valid_choice(values.get("mode"), VALID_LAYOUT_MODES, "grid"),
         badge_size_inches=_safe_float(values.get("badge_size"), 1.35, 0.35, 4.0),
         spacing_inches=_safe_float(values.get("spacing"), 0.18, 0.0, 2.0),
         copies=_safe_int(values.get("copies"), 1, 1, 24),
-        mirror=_truthy(values.get("mirror")),
+        mirror=_truthy(values.get("mirror"), default=True),
     )
