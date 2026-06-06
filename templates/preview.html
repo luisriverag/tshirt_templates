@@ -43,11 +43,14 @@
         <label class="inline">Edge tolerance
           <input type="number" id="edge-snap-tolerance" min="0.1" step="0.1" value="0.25"> {{ unit }}
         </label>
+        <label class="inline"><input type="checkbox" id="high-contrast-preview"> High-contrast outlines</label>
         <div id="preview-status" class="sr-status" role="status" aria-live="polite">Preview ready. Select a badge and use arrow keys to nudge it.</div>
       </section>
 
       <div class="preview-wrap">
-        <svg class="page-preview" viewBox="0 0 {{ page_width }} {{ page_height }}" role="img" aria-label="PDF template preview">
+        <svg class="page-preview" viewBox="0 0 {{ page_width }} {{ page_height }}" role="img" aria-labelledby="preview-title preview-description">
+          <title id="preview-title">PDF template preview</title>
+          <desc id="preview-description">{{ badges|length }} selected badges across {{ layouts|length }} panel(s). Detailed placement coordinates are listed in the layout summary after the preview.</desc>
           <rect x="0" y="0" width="{{ page_width }}" height="{{ page_height }}" fill="white"/>
           {% for layout in layouts %}
             {% set layout_index = loop.index0 %}
@@ -64,8 +67,10 @@
                 <g class="draggable-badge" tabindex="0" role="button" aria-label="Move {{ badge.name }}" data-key="{{ layout_index }}_{{ placement_index }}" data-x="{{ placement.x }}" data-y="{{ page_height - placement.y - placement.height }}" data-width="{{ placement.width }}" data-height="{{ placement.height }}" data-rotation="{{ -placement.rotation }}" data-panel-x="{{ layout.x }}" data-panel-y="{{ page_height - layout.y - layout.height }}" data-panel-width="{{ layout.width }}" data-panel-height="{{ layout.height }}">
                   <title>{{ badge.name }}</title>
                   <g class="badge-transform" transform="translate({{ placement.x + placement.width / 2 }} {{ page_height - placement.y - placement.height / 2 }}) rotate({{ -placement.rotation }})">
-                    <rect class="collision-outline" x="{{ -placement.width / 2 }}" y="{{ -placement.height / 2 }}" width="{{ placement.width }}" height="{{ placement.height }}" rx="6"/>
                     <image href="{{ badge.raw_url }}" x="{{ -placement.width / 2 }}" y="{{ -placement.height / 2 }}" width="{{ placement.width }}" height="{{ placement.height }}" preserveAspectRatio="xMidYMid meet"/>
+                    {% if form.get('include_cut_lines') == 'on' %}<rect class="cut-line-outline" x="{{ -placement.width / 2 }}" y="{{ -placement.height / 2 }}" width="{{ placement.width }}" height="{{ placement.height }}" rx="6"/>{% endif %}
+                    <rect class="badge-contrast-outline" x="{{ -placement.width / 2 }}" y="{{ -placement.height / 2 }}" width="{{ placement.width }}" height="{{ placement.height }}" rx="6"/>
+                    <rect class="collision-outline" x="{{ -placement.width / 2 }}" y="{{ -placement.height / 2 }}" width="{{ placement.width }}" height="{{ placement.height }}" rx="6"/>
                   </g>
                 </g>
               {% endif %}
@@ -73,6 +78,30 @@
           {% endfor %}
         </svg>
       </div>
+
+      <section class="panel layout-summary" aria-labelledby="layout-summary-title">
+        <div class="section-heading">
+          <h2 id="layout-summary-title">Layout summary</h2>
+          <span>{{ layouts|length }} panel(s)</span>
+        </div>
+        <p class="hint">Text alternative for the generated preview. Coordinates use {{ unit }} from the page’s top-left corner.</p>
+        <ul>
+          {% for layout in layouts %}
+            <li>
+              <strong>{{ layout.side|title }} panel:</strong>
+              {{ layout.placements|length }} placement(s).
+              <ul>
+                {% for placement in layout.placements %}
+                  {% set badge = badge_lookup.get(placement.badge_id) %}
+                  {% if badge %}
+                    <li>{{ badge.name }} on {{ layout.side|title }} at X {{ '%.2f'|format(placement.x / points_per_unit) }}, Y {{ '%.2f'|format((page_height - placement.y - placement.height) / points_per_unit) }}, rotation {{ '%.1f'|format(placement.rotation) }}°.</li>
+                  {% endif %}
+                {% endfor %}
+              </ul>
+            </li>
+          {% endfor %}
+        </ul>
+      </section>
 
       <form method="post" action="/pdf" class="sticky-actions" id="manual-layout-form">
         <section class="panel manual-panel">
@@ -121,7 +150,7 @@
           </div>
         </section>
 
-        {% for key in ['page_size', 'orientation', 'mode', 'order', 'unit', 'badge_size', 'spacing', 'include_logo', 'logo_size', 'copies', 'mirror', 'include_print_marks', 'front_text', 'back_text', 'text_font'] %}
+        {% for key in ['page_size', 'orientation', 'mode', 'order', 'unit', 'badge_size', 'spacing', 'include_logo', 'logo_size', 'copies', 'mirror', 'include_print_marks', 'include_cut_lines', 'front_text', 'back_text', 'text_font'] %}
           {% if form.get(key) %}<input type="hidden" name="{{ key }}" value="{{ form.get(key) }}">{% endif %}
         {% endfor %}
         {% for side in form.getlist('sides') %}<input type="hidden" name="sides" value="{{ side }}">{% endfor %}
@@ -141,6 +170,7 @@
       const snapStep = document.querySelector('#snap-step');
       const snapToPanelEdges = document.querySelector('#snap-to-panel-edges');
       const edgeSnapTolerance = document.querySelector('#edge-snap-tolerance');
+      const highContrastPreview = document.querySelector('#high-contrast-preview');
       const status = document.querySelector('#preview-status');
       const inputs = new Map();
       let selectedBadge = null;
@@ -315,6 +345,11 @@
       previewZoom.addEventListener('input', () => {
         svg.style.width = `${previewZoom.value}%`;
         previewZoomValue.textContent = `${previewZoom.value}%`;
+      });
+
+      highContrastPreview.addEventListener('change', () => {
+        svg.classList.toggle('high-contrast', highContrastPreview.checked);
+        setStatus(highContrastPreview.checked ? 'High-contrast preview outlines enabled.' : 'High-contrast preview outlines disabled.');
       });
 
       updateCollisionWarnings();

@@ -48,6 +48,10 @@ def test_index_renders_badge_picker(monkeypatch):
     assert b"Badge order" in response.data
     assert b"All badges are selected by default" in response.data
     assert b"Search badges" in response.data
+    assert b"Skip badge list and continue to actions" in response.data
+    assert b'id="badge-picker-help"' in response.data
+    assert b'aria-describedby="badge-picker-help"' in response.data
+    assert b'id="template-actions"' in response.data
     assert b"Select visible" in response.data
     assert b"Clear visible" in response.data
     assert b'draggable="true"' in response.data
@@ -60,6 +64,8 @@ def test_index_renders_badge_picker(monkeypatch):
     assert b'name="mirror" value="off"' in response.data
     assert b"Add crop and registration marks" in response.data
     assert b'name="include_print_marks" value="off"' in response.data
+    assert b"Add badge cut-line outlines" in response.data
+    assert b'name="include_cut_lines" value="off"' in response.data
     assert b"Demo Badge" in response.data
 
 
@@ -151,11 +157,19 @@ def test_preview_renders_selected_layout(monkeypatch):
             "front_text": "Ada",
             "back_text": "MakeSpace",
             "text_font": "dejavu",
+            "include_cut_lines": "on",
         },
     )
 
     assert response.status_code == 200
     assert b"PDF template preview" in response.data
+    assert b"Layout summary" in response.data
+    assert b"Demo Badge on Front" in response.data
+    assert b"Detailed placement coordinates" in response.data
+    assert b"High-contrast outlines" in response.data
+    assert b"badge-contrast-outline" in response.data
+    assert b"cut-line-outline" in response.data
+    assert b"highContrastPreview" in response.data
     assert b'class="brand-mark"' in response.data
     assert b'viewBox="0 0 792.0 612.0"' in response.data
     assert b'name="orientation" value="landscape"' in response.data
@@ -223,7 +237,9 @@ def test_pdf_route_returns_mirrored_pdf_download_by_default(monkeypatch):
     assert calls[0]["mirror"] is True
     assert calls[0]["panel_text"] == {"front": "", "back": "", "font": "ubuntu"}
     assert calls[0]["print_marks"] is False
+    assert calls[0]["cut_lines"] is False
     assert calls[0]["metadata"]["include_print_marks"] == "false"
+    assert calls[0]["metadata"]["include_cut_lines"] == "false"
 
 
 def test_pdf_route_passes_panel_text_options(monkeypatch):
@@ -399,11 +415,18 @@ def test_api_health_options_and_badges(monkeypatch):
     client = app.test_client()
 
     health = client.get("/api/v1/health")
+    ready = client.get("/api/v1/ready")
     options = client.get("/api/v1/options")
     badges = client.get("/api/v1/badges?include_logo=true")
 
     assert health.status_code == 200
     assert health.json == {"status": "ok", "service": "tshirt_templates"}
+    assert ready.status_code == 200
+    assert ready.json == {
+        "status": "ready",
+        "service": "tshirt_templates",
+        "checks": {"upload_folder": "ok"},
+    }
     assert options.status_code == 200
     assert options.json["defaults"]["page_size"] == "a4"
     assert options.json["defaults"]["text_font"] == "ubuntu"
@@ -572,6 +595,7 @@ def test_api_pdf_generates_pdf_from_json(monkeypatch):
                 "text_font": "courier",
                 "mirror": False,
                 "include_print_marks": True,
+                "include_cut_lines": True,
             },
             "manual_placements": [
                 {"layout_index": 0, "placement_index": 0, "x": 1.0, "y": 2.0, "rotation": 12}
@@ -590,7 +614,9 @@ def test_api_pdf_generates_pdf_from_json(monkeypatch):
     assert kwargs["mirror"] is False
     assert kwargs["panel_text"] == {"front": "Ada", "back": "", "font": "courier"}
     assert kwargs["print_marks"] is True
+    assert kwargs["cut_lines"] is True
     assert kwargs["metadata"]["include_print_marks"] == "true"
+    assert kwargs["metadata"]["include_cut_lines"] == "true"
 
 
 def test_api_pdf_rejects_non_json_payload():
@@ -812,3 +838,19 @@ def test_mcp_render_pdf_upload_and_validate_template(monkeypatch, tmp_path):
     validation_payload = validation.json["result"]["structuredContent"]
     assert validation_payload["normalized"]["options"]["sides"] == ["front"]
     assert validation_payload["warnings"][0]["code"] == "unknown_badges"
+
+
+def test_api_ready_reports_not_ready_when_upload_folder_is_file(tmp_path):
+    app = create_app()
+    upload_path = tmp_path / "uploads"
+    upload_path.write_text("not a directory", encoding="utf-8")
+    app.config["UPLOAD_FOLDER"] = str(upload_path)
+
+    response = app.test_client().get("/api/v1/ready")
+
+    assert response.status_code == 503
+    assert response.json == {
+        "status": "not_ready",
+        "service": "tshirt_templates",
+        "checks": {"upload_folder": "error"},
+    }

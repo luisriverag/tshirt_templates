@@ -17,7 +17,7 @@ This application is a Flask-based generator for printable t-shirt sublimation ba
 ## Application Entry Points
 
 - `tshirt_templates/app.py` exposes `create_app()` and module-level `app`.
-- `tshirt_templates/cli.py` exposes a `generate-pdf` command for JSON-template PDF generation.
+- `tshirt_templates/cli.py` exposes `serve` for running the browser UI, JSON API, and MCP endpoint together, plus `generate-pdf` for JSON-template PDF generation.
 - `templates/index.html` renders the generator form.
 - `templates/preview.html` renders the SVG preview and manual placement form.
 - `static/styles.css` defines the MakeSpace-inspired black/yellow monospace UI theme and global styling.
@@ -35,6 +35,7 @@ This application is a Flask-based generator for printable t-shirt sublimation ba
 | `POST` | `/pdf` | Parse form options, save uploads, compute/apply layouts, and return a generated PDF download. |
 | `GET` | `/calibration.pdf` | Return a calibration PDF with rulers and mirror guidance for checking print scale. |
 | `GET` | `/api/v1/health` | Return service health as JSON. |
+| `GET` | `/api/v1/ready` | Return readiness status for container or process supervisors. |
 | `GET` | `/api/v1/options` | Return option values and defaults as JSON. |
 | `GET` | `/api/v1/badges` | Return available badges as JSON. |
 | `POST` | `/api/v1/uploads` | Save multipart badge artwork uploads and return created badge records as JSON. |
@@ -44,6 +45,10 @@ This application is a Flask-based generator for printable t-shirt sublimation ba
 | `POST` | `/api/v1/pdfs` | Generate a PDF from a JSON layout request. |
 | `GET` | `/mcp` | Return MCP endpoint metadata. |
 | `POST` | `/mcp` | Handle initial MCP JSON-RPC methods and tool calls. |
+
+## Accessibility and Preview Summaries
+
+Preview pages include a textual layout summary with panel counts and badge coordinates as an accessible alternative to the generated SVG preview. The preview toolbar also includes a high-contrast outline toggle that thickens panel and badge outlines for easier visual review. The badge picker includes visible keyboard focus styles and a skip link so keyboard users can bypass the long badge grid after choosing search/filter options.
 
 ## MCP Capabilities
 
@@ -193,11 +198,11 @@ Size and spacing use preset selector values instead of arbitrary numbers. Preset
 
 ### Print Marks and PDF Metadata
 
-Users can download a calibration PDF with centimeter/inch rulers and mirror guidance to verify print scale. Users can also enable optional crop and registration marks in generated PDFs. The PDF renderer also writes selected layout options into PDF subject/keyword metadata so exported files retain the page, layout, mirror, logo, text-font, and print-mark settings used to generate them.
+Users can download a calibration PDF with centimeter/inch rulers and mirror guidance to verify print scale. Users can also enable optional badge cut-line outlines and crop/registration marks in generated PDFs. The PDF renderer also writes selected layout options into PDF subject/keyword metadata so exported files retain the page, layout, mirror, logo, text-font, cut-line, and print-mark settings used to generate them.
 
 ## API and MCP Serialization
 
-The initial API implementation serializes badges, panel layouts, and placements with both selected display units and raw PDF point values. JSON layout requests also accept optional manual placement overrides addressed by layout and placement indexes. The CLI `generate-pdf` command uses the same JSON request shape as `/api/v1/pdfs`. The MCP endpoint reuses the same serializers through `get_options`, `list_badges`, and `compute_layout` tools.
+The API implementation serializes badges, panel layouts, and placements with both selected display units and raw PDF point values. JSON layout requests also accept optional manual placement overrides addressed by layout and placement indexes. The CLI `serve` command starts the same Flask app that serves the browser UI, `/api/v1`, and `/mcp`; the CLI `generate-pdf` command uses the same JSON request shape as `/api/v1/pdfs`. The MCP endpoint reuses the same serializers through `get_options`, `list_badges`, and `compute_layout` tools.
 
 ## Testing Strategy
 
@@ -207,7 +212,8 @@ The test suite covers:
 - Option parsing, defaulting, validation, and unit conversion.
 - Layout page sizes, orientation, placement bounds, copies, and layout modes.
 - Flask route rendering for index, preview, refresh, uploads, calibration, and PDF download behavior.
-- CLI generation from JSON template files.
+- JSON API health/readiness/options/badges/upload/layout/PDF routes and MCP resource/tool/prompt responses.
+- CLI generation from JSON template files and the unified `serve` command.
 - Manual coordinate conversion into PDF layout placements.
 
 Run:
@@ -220,7 +226,6 @@ python -m compileall tshirt_templates
 ## Current Non-Goals
 
 - Persistent server-side template storage.
-- Public JSON API endpoints.
 - Multi-page PDF output.
 - Authentication or multi-user authorization.
 - Real-time collaboration.

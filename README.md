@@ -21,7 +21,7 @@ The app discovers badge image assets from the GitHub repository, lets you select
 - Configurable page size (A4 by default), page orientation, centimeter/inch units, badge size presets, spacing presets, copies per badge, mirroring, and panel selection, with invalid form values safely normalized.
 - Optional front/back panel text for names or short labels, with Ubuntu as the default font plus Helvetica, Times, Courier, and DejaVu Sans choices.
 - User uploads for additional SVG/PNG/JPG badge artwork stored under the Flask `instance/uploads/` folder, with browser and API replacement/deletion for saved uploads and validation notices for questionable image dimensions or invalid artwork.
-- Optional mirroring for sublimation transfer workflows plus crop/registration print marks and a calibration page with rulers/mirror warnings for alignment.
+- Optional mirroring for sublimation transfer workflows plus badge cut-line outlines, crop/registration print marks, and a calibration page with rulers/mirror warnings for alignment.
 - Optional MakeSpace Madrid logo element with configurable size.
 - Badge picker cards are selected by default, searchable/filterable by category, bulk selectable, and drag-and-droppable before previewing to customize selection-order layouts.
 - MakeSpace-inspired black/yellow monospace UI theme plus browser preview with manual drag/coordinate placement adjustments, reset controls, zoom, snap-to-grid, snap-to-panel-edge controls, keyboard nudging, rotation presets, overlap warnings, and PDF download.
@@ -33,10 +33,16 @@ The app discovers badge image assets from the GitHub repository, lets you select
 python -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
-flask --app tshirt_templates.app run --debug
+python -m tshirt_templates.cli serve --debug
 ```
 
-Open <http://127.0.0.1:5000>.
+Open <http://127.0.0.1:5000>. The same server also exposes the JSON API under `/api/v1` and the MCP JSON-RPC endpoint at `/mcp`, so the browser UI, API clients, and MCP clients all run from one app process.
+
+If you prefer Flask's built-in CLI, this equivalent command serves the same UI, API, and MCP routes:
+
+```bash
+flask --app tshirt_templates.app run --debug
+```
 
 ## CLI PDF generation
 

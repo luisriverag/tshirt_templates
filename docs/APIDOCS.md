@@ -1,5 +1,21 @@
 # API and MCP Planning Documentation
 
+## Running the Unified App/API/MCP Server
+
+Run the browser app, JSON API, and MCP endpoint together with the CLI helper:
+
+```bash
+python -m tshirt_templates.cli serve --debug
+```
+
+That command starts one Flask development server. The browser UI is available at `/`, the JSON API is available under `/api/v1`, and the MCP JSON-RPC endpoint is available at `/mcp`. Host and port can be customized with `--host` and `--port`; for example, `python -m tshirt_templates.cli serve --host 0.0.0.0 --port 8080`.
+
+The equivalent Flask command is still supported:
+
+```bash
+flask --app tshirt_templates.app run --debug
+```
+
 ## Current API Surface
 
 The app now has the original browser form routes plus an initial JSON API and MCP JSON-RPC endpoint:
@@ -15,6 +31,7 @@ The app now has the original browser form routes plus an initial JSON API and MC
 | `POST` | `/pdf` | PDF | Returns generated PDF bytes. |
 | `GET` | `/calibration.pdf` | PDF | Returns a calibration page with rulers and mirror guidance. |
 | `GET` | `/api/v1/health` | JSON | Basic service health. |
+| `GET` | `/api/v1/ready` | JSON | Readiness check for container or process supervisors. |
 | `GET` | `/api/v1/options` | JSON | Supported option values and defaults. |
 | `GET` | `/api/v1/badges` | JSON | Available badges with optional refresh/order/logo query flags. |
 | `POST` | `/api/v1/uploads` | JSON | Saves multipart badge artwork uploads and returns created badge records. |
@@ -77,6 +94,7 @@ Design goals:
   "sides": ["front", "back"],
   "mirror": true,
   "include_print_marks": false,
+  "include_cut_lines": false,
   "front_text": "Ada",
   "back_text": "MakeSpace Madrid",
   "text_font": "ubuntu"
@@ -125,6 +143,22 @@ Response:
 {
   "status": "ok",
   "service": "tshirt_templates"
+}
+```
+
+### `GET /api/v1/ready`
+
+Returns readiness status for process supervisors. The endpoint verifies that the configured upload folder can be created and is a directory. It returns `200 OK` with `status: "ready"` when checks pass and `503 Service Unavailable` with `status: "not_ready"` when a required local dependency is unavailable.
+
+Response:
+
+```json
+{
+  "status": "ready",
+  "service": "tshirt_templates",
+  "checks": {
+    "upload_folder": "ok"
+  }
 }
 ```
 
@@ -254,6 +288,7 @@ Request:
     "sides": ["front", "back"],
     "mirror": true,
     "include_print_marks": false,
+    "include_cut_lines": false,
     "front_text": "Ada",
     "back_text": "MakeSpace Madrid",
     "text_font": "ubuntu"
@@ -303,6 +338,7 @@ Request:
     "sides": ["front", "back"],
     "mirror": true,
     "include_print_marks": false,
+    "include_cut_lines": false,
     "front_text": "Ada",
     "back_text": "MakeSpace Madrid",
     "text_font": "ubuntu"
@@ -335,7 +371,13 @@ Potential fields:
 
 ## CLI Automation
 
-The CLI can generate PDFs from the same JSON request shape accepted by `POST /api/v1/pdfs`:
+The CLI can start the unified development server for the browser UI, JSON API, and MCP endpoint:
+
+```bash
+python -m tshirt_templates.cli serve --debug
+```
+
+The CLI can also generate PDFs from the same JSON request shape accepted by `POST /api/v1/pdfs`:
 
 ```bash
 python -m tshirt_templates.cli generate-pdf template.json tshirt-badge-template.pdf
@@ -499,8 +541,7 @@ The endpoint supports `initialize`, `ping`, `notifications/initialized`, `tools/
 
 ### MCP Open Questions
 
-- Should MCP be served by the Flask app or a separate process?
-- Should MCP call internal Python functions directly or go through `/api/v1`?
+- Should MCP continue calling internal Python functions directly, or should future tools go through `/api/v1` for stricter schema/error parity?
 - Should generated PDFs continue to be returned as base64 JSON, or should future MCP clients receive resource references or files?
 - Should upstream badge refresh be available to MCP clients by default?
 - What retention policy should apply to generated PDFs and temporary layouts?

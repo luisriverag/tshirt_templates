@@ -24,6 +24,7 @@ def test_parse_layout_options_accepts_valid_values():
         "back_text": "MakeSpace Madrid",
         "text_font": "dejavu",
         "include_print_marks": "on",
+        "include_cut_lines": "on",
     }
 
     assert parse_layout_options(values, _getlist({"sides": ["back"]})) == LayoutOptions(
@@ -46,6 +47,7 @@ def test_parse_layout_options_accepts_valid_values():
         back_text="MakeSpace Madrid",
         text_font="dejavu",
         include_print_marks=True,
+        include_cut_lines=True,
     )
 
 
@@ -65,6 +67,7 @@ def test_parse_layout_options_normalizes_invalid_values():
         "front_text": "x" * 80,
         "text_font": "papyrus",
         "include_print_marks": "maybe",
+        "include_cut_lines": "maybe",
     }
 
     options = parse_layout_options(values, _getlist({"sides": ["front", "sleeve"]}))
@@ -88,6 +91,7 @@ def test_parse_layout_options_normalizes_invalid_values():
         front_text="x" * 64,
         text_font="ubuntu",
         include_print_marks=False,
+        include_cut_lines=False,
     )
 
 

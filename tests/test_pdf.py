@@ -25,11 +25,13 @@ def test_render_pdf_can_include_print_marks_and_metadata():
         (200.0, 200.0),
         [layout],
         print_marks=True,
-        metadata={"include_print_marks": "true", "mode": "grid"},
+        cut_lines=True,
+        metadata={"include_cut_lines": "true", "include_print_marks": "true", "mode": "grid"},
     )
 
     assert content.startswith(b"%PDF")
     assert b"include_print_marks=true" in content
+    assert b"include_cut_lines=true" in content
     assert b"mode=grid" in content
     assert b"/Subject" in content
 
