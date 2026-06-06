@@ -19,10 +19,13 @@ The app discovers badge image assets from the GitHub repository, lets you select
   - **Border**: perimeter frame layout for collar/sleeve-style badge accents.
   - **M pixel shape**: pixel-art capital M that repeats the selected badges as mosaic pixels.
 - Configurable page size (A4 by default), page orientation, centimeter/inch units, badge size presets, spacing presets, copies per badge, mirroring, and panel selection, with invalid form values safely normalized.
-- User uploads for additional SVG/PNG/JPG badge artwork stored under the Flask `instance/uploads/` folder.
-- Optional mirroring for sublimation transfer workflows.
+- Optional front/back panel text for names or short labels, with Ubuntu as the default font plus Helvetica, Times, Courier, and DejaVu Sans choices.
+- User uploads for additional SVG/PNG/JPG badge artwork stored under the Flask `instance/uploads/` folder, with browser and API replacement/deletion for saved uploads and validation notices for questionable image dimensions or invalid artwork.
+- Optional mirroring for sublimation transfer workflows plus crop/registration print marks and a calibration page with rulers/mirror warnings for alignment.
 - Optional MakeSpace Madrid logo element with configurable size.
-- MakeSpace-inspired black/yellow monospace UI theme plus browser preview with manual drag/coordinate placement adjustments and PDF download.
+- Badge picker cards are selected by default, searchable/filterable by category, bulk selectable, and drag-and-droppable before previewing to customize selection-order layouts.
+- MakeSpace-inspired black/yellow monospace UI theme plus browser preview with manual drag/coordinate placement adjustments, reset controls, zoom, snap-to-grid, snap-to-panel-edge controls, keyboard nudging, rotation presets, overlap warnings, and PDF download.
+- JSON API endpoints for health/options/badges, API uploads, layout previews, and direct PDF generation, plus MCP-compatible tools/resources/prompts and a CLI for agent-driven or repeatable local PDF workflows.
 
 ## Quick start
 
@@ -34,6 +37,16 @@ flask --app tshirt_templates.app run --debug
 ```
 
 Open <http://127.0.0.1:5000>.
+
+## CLI PDF generation
+
+Generate a PDF from the same JSON request shape used by `/api/v1/pdfs`:
+
+```bash
+python -m tshirt_templates.cli generate-pdf template.json tshirt-badge-template.pdf
+```
+
+Use `--upload-folder instance/uploads` when the JSON references previously uploaded `upload:` badge IDs.
 
 ## Documentation
 
@@ -49,7 +62,7 @@ python -m ruff check .
 python -m pytest
 ```
 
-The pytest suite includes dependency-light unit coverage for layout and badge discovery. Flask route integration tests are also included and run automatically when the runtime dependencies from `requirements.txt` are installed.
+The pytest suite includes dependency-light unit coverage for layout, badge discovery, uploads, option parsing, CLI generation, API option payloads, PDF handoff behavior, and MCP resources/tools. Flask route integration tests are also included and run automatically when the runtime dependencies from `requirements.txt` are installed.
 
 ## Notes
 

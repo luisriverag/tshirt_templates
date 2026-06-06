@@ -14,6 +14,8 @@ VALID_LAYOUT_MODES = frozenset(
 )
 VALID_ORDER_MODES = frozenset({"selected", "alphabetical", "category"})
 VALID_UNITS = frozenset({"cm", "in"})
+VALID_TEXT_FONTS = frozenset({"ubuntu", "helvetica", "times", "courier", "dejavu"})
+MAX_PANEL_TEXT_LENGTH = 64
 CENTIMETERS_PER_INCH = 2.54
 DEFAULT_PAGE_SIZE = "a4"
 DEFAULT_UNIT = "cm"
@@ -85,6 +87,10 @@ class LayoutOptions:
     copies: int = 1
     order: str = "selected"
     mirror: bool = True
+    include_print_marks: bool = False
+    front_text: str = ""
+    back_text: str = ""
+    text_font: str = "ubuntu"
 
 
 def _truthy(value: str | None, default: bool = False) -> bool:
@@ -115,6 +121,14 @@ def _unit_amount_inches(amount: str, unit: str) -> float:
     if unit == "cm":
         return parsed / CENTIMETERS_PER_INCH
     return parsed
+
+
+def _safe_panel_text(value: str | None) -> str:
+    """Return text safe for shirt-panel labels, keeping it short enough to fit."""
+
+    if value is None:
+        return ""
+    return " ".join(value.split())[:MAX_PANEL_TEXT_LENGTH]
 
 
 def _valid_unit_amount(
@@ -160,4 +174,8 @@ def parse_layout_options(
         copies=_safe_int(values.get("copies"), 1, 1, 24),
         order=_valid_choice(values.get("order"), VALID_ORDER_MODES, "selected"),
         mirror=_truthy(values.get("mirror"), default=True),
+        include_print_marks=_truthy(values.get("include_print_marks")),
+        front_text=_safe_panel_text(values.get("front_text")),
+        back_text=_safe_panel_text(values.get("back_text")),
+        text_font=_valid_choice(values.get("text_font"), VALID_TEXT_FONTS, "ubuntu"),
     )

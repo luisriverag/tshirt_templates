@@ -9,12 +9,19 @@ The app now has the original browser form routes plus an initial JSON API and MC
 | `GET` | `/` | HTML | Generator form. |
 | `POST` | `/refresh` | Redirect | Clears the badge discovery cache. |
 | `GET` | `/uploads/<filename>` | File | Serves uploaded artwork. |
+| `POST` | `/uploads/delete` | Redirect | Deletes a saved upload from the browser picker. |
+| `POST` | `/uploads/replace` | Redirect | Replaces a saved upload from the browser picker. |
 | `POST` | `/preview` | HTML | Renders SVG preview from submitted form data. |
 | `POST` | `/pdf` | PDF | Returns generated PDF bytes. |
+| `GET` | `/calibration.pdf` | PDF | Returns a calibration page with rulers and mirror guidance. |
 | `GET` | `/api/v1/health` | JSON | Basic service health. |
 | `GET` | `/api/v1/options` | JSON | Supported option values and defaults. |
 | `GET` | `/api/v1/badges` | JSON | Available badges with optional refresh/order/logo query flags. |
+| `POST` | `/api/v1/uploads` | JSON | Saves multipart badge artwork uploads and returns created badge records. |
+| `PUT` | `/api/v1/uploads/<filename>` | JSON | Replaces a saved uploaded badge artwork file by storage filename. |
+| `DELETE` | `/api/v1/uploads/<filename>` | JSON | Deletes a saved uploaded badge artwork file by storage filename. |
 | `POST` | `/api/v1/layouts/preview` | JSON | Computes layouts from badge IDs and options. |
+| `POST` | `/api/v1/pdfs` | PDF | Generates PDF bytes from badge IDs, options, and optional manual placements. |
 | `GET` | `/mcp` | JSON | MCP server metadata. |
 | `POST` | `/mcp` | JSON-RPC | Initial MCP methods for initialize, tools/resources listing, and tool calls. |
 
@@ -68,7 +75,11 @@ Design goals:
   "copies": 1,
   "order": "selected",
   "sides": ["front", "back"],
-  "mirror": true
+  "mirror": true,
+  "include_print_marks": false,
+  "front_text": "Ada",
+  "back_text": "MakeSpace Madrid",
+  "text_font": "ubuntu"
 }
 ```
 
@@ -127,11 +138,12 @@ Response should include:
 - Orientations.
 - Layout modes.
 - Units.
+- Text fonts.
 - Badge size presets.
 - Spacing presets.
 - Copy range.
 - Order modes.
-- Default option object.
+- Default option object, including `front_text`, `back_text`, and `text_font`.
 
 ### `GET /api/v1/badges`
 
@@ -147,13 +159,77 @@ Query parameters:
 
 ### `POST /api/v1/uploads`
 
-Not implemented yet. It should accept multipart artwork uploads and return created badge records.
+Accepts multipart artwork uploads using the `uploads` field and returns created badge records. Supported file extensions match the browser uploader: SVG, PNG, JPG, and JPEG. Empty, unsupported, oversized, malformed SVG, and unreadable raster files are ignored; if no files are saved, the endpoint returns a structured `invalid_upload` error. Valid uploads may include non-fatal dimension warnings when dimensions are missing, very small, or very large.
+
+Request:
+
+```text
+Content-Type: multipart/form-data
+uploads=@team-badge.svg
+uploads=@sponsor.png
+```
+
+Response (`201 Created`):
+
+```json
+{
+  "badges": [
+    {
+      "id": "upload:uuid-team-badge.svg",
+      "name": "Team Badge",
+      "path": "uploaded/uuid-team-badge.svg",
+      "raw_url": "/uploads/uuid-team-badge.svg",
+      "extension": ".svg",
+      "source": "upload"
+    }
+  ],
+  "warnings": []
+}
+```
+
+### `PUT /api/v1/uploads/{filename}`
+
+Replaces a saved uploaded badge artwork file in place by storage filename. Submit one multipart file under `upload` (or `replacement_upload` for parity with the browser form). The storage filename stays unchanged so existing `upload:` badge IDs continue to work. Empty, oversized, malformed SVG, and unreadable raster replacements are rejected; valid replacements may include non-fatal dimension warnings.
+
+Request:
+
+```text
+Content-Type: multipart/form-data
+upload=@updated-team-badge.svg
+```
+
+Response (`200 OK`):
+
+```json
+{
+  "badge": {
+    "id": "upload:uuid-team-badge.svg",
+    "name": "Team Badge",
+    "path": "uploaded/uuid-team-badge.svg",
+    "raw_url": "/uploads/uuid-team-badge.svg",
+    "extension": ".svg",
+    "source": "upload"
+  },
+  "warnings": []
+}
+```
+
+### `DELETE /api/v1/uploads/{filename}`
+
+Deletes a saved uploaded badge artwork file by storage filename, for example `uuid-team-badge.svg`. Clients should pass the filename portion of an `upload:` badge ID without the `upload:` prefix. The endpoint rejects path traversal and unsupported extensions, and returns a structured `upload_not_found` error when no matching saved upload exists.
+
+Response (`200 OK`):
+
+```json
+{
+  "deleted": "uuid-team-badge.svg"
+}
+```
 
 Future considerations:
 
 - Enforce maximum file count per request.
 - Return image dimensions when possible.
-- Support deletion or replacement of uploaded assets.
 
 ### `POST /api/v1/layouts/preview`
 
@@ -175,11 +251,18 @@ Request:
     "logo_size": "5.0",
     "copies": 1,
     "order": "selected",
-    "sides": ["front", "back"]
+    "sides": ["front", "back"],
+    "mirror": true,
+    "include_print_marks": false,
+    "front_text": "Ada",
+    "back_text": "MakeSpace Madrid",
+    "text_font": "ubuntu"
   },
   "manual_placements": []
 }
 ```
+
+`front_text` and `back_text` are optional short labels rendered on the matching panel. `text_font` accepts the values returned by `/api/v1/options` and defaults to `ubuntu`.
 
 Manual placements are optional. Items are addressed by `layout_index` and `placement_index`, with `x`/`y` supplied in the selected unit from the preview top-left coordinate space.
 
@@ -199,15 +282,43 @@ Response:
 
 ### `POST /api/v1/pdfs`
 
-Generates a PDF from a JSON layout request.
+Generates a PDF from the same JSON layout request shape used by `/api/v1/layouts/preview`. The endpoint applies badge ordering, copies, optional logo placement, optional panel text, manual placement overrides, and mirror settings, then returns `application/pdf` bytes directly.
 
-Possible response strategies:
+Request:
 
-1. Return `application/pdf` bytes directly.
-2. Return JSON with a temporary download URL.
-3. Return a job ID for asynchronous generation.
+```json
+{
+  "badge_ids": ["demo-badge.svg"],
+  "options": {
+    "page_size": "a4",
+    "orientation": "portrait",
+    "mode": "grid",
+    "unit": "cm",
+    "badge_size": "3.5",
+    "spacing": "0.5",
+    "include_logo": false,
+    "logo_size": "5.0",
+    "copies": 1,
+    "order": "selected",
+    "sides": ["front", "back"],
+    "mirror": true,
+    "include_print_marks": false,
+    "front_text": "Ada",
+    "back_text": "MakeSpace Madrid",
+    "text_font": "ubuntu"
+  },
+  "manual_placements": []
+}
+```
 
-Direct bytes are simplest for v1. Job-based generation is better if future templates become multi-page or asset-heavy.
+Response:
+
+```text
+Content-Type: application/pdf
+Content-Disposition: attachment; filename=tshirt-badge-template.pdf
+```
+
+Job-based generation remains a future option if templates become multi-page or asset-heavy.
 
 ### `POST /api/v1/templates`
 
@@ -221,6 +332,16 @@ Potential fields:
 - `manual_placements`
 - `created_at`
 - `updated_at`
+
+## CLI Automation
+
+The CLI can generate PDFs from the same JSON request shape accepted by `POST /api/v1/pdfs`:
+
+```bash
+python -m tshirt_templates.cli generate-pdf template.json tshirt-badge-template.pdf
+```
+
+If the template references uploaded `upload:` badge IDs, pass `--upload-folder` with the folder that contains those files.
 
 ## Error Format
 
@@ -248,8 +369,6 @@ Suggested status codes:
 
 ## Pending API Implementation Tasks
 
-- Add `POST /api/v1/uploads` for API-driven artwork upload.
-- Add `POST /api/v1/pdfs` for API-driven PDF rendering.
 - Add API-specific validation error objects instead of silently normalizing every invalid value.
 - Decide whether the MakeSpace logo is modeled as a reserved badge, separate element, or template decoration in JSON responses.
 - Decide whether PDF generation should be synchronous or job-based.
@@ -257,29 +376,44 @@ Suggested status codes:
 
 ## Model Context Protocol (MCP) Implementation
 
-Initial MCP support is implemented at `/mcp` using JSON-RPC-style messages. This section also tracks pending features for future automation and IDE integrations.
+MCP support is implemented at `/mcp` using JSON-RPC-style messages. JSON-RPC errors are returned in an `error` object with HTTP 200 so clients that expect JSON-RPC-over-HTTP semantics can still parse the response body. This section also tracks pending features for future automation and IDE integrations.
 
 ### MCP Server Goals
 
 The MCP endpoint lets IDEs, agents, and design tools inspect and generate t-shirt template layouts without manually driving the browser.
 
-The server should expose:
+The server exposes badge catalog and layout option resources, template preview tools, PDF generation tools, uploaded asset management tools, validation helpers, and layout-related prompt suggestions.
 
-- Badge catalog resources.
-- Layout option resources.
-- Template preview tools.
-- PDF generation tools.
-- Uploaded asset management tools.
+### MCP Resources
 
-### Proposed MCP Resources
+`resources/list` currently returns the two implemented JSON resources. `resources/read` returns one `contents` entry with `mimeType: application/json` and serialized `text`. `resources/templates/list` is supported and currently returns an empty `resourceTemplates` array for clients that call it during capability discovery.
 
-| Resource URI | Description |
-| --- | --- |
-| `tshirt://options` | Current supported options and defaults. |
-| `tshirt://badges` | Available badge catalog. |
-| `tshirt://layouts/{id}` | Persisted or temporary computed layout. |
-| `tshirt://templates/{id}` | Saved template configuration. |
-| `tshirt://uploads` | Uploaded artwork metadata. |
+| Resource URI | Status | Description |
+| --- | --- | --- |
+| `tshirt://options` | Implemented | Current supported options and defaults, matching `/api/v1/options`. |
+| `tshirt://badges` | Implemented | Alphabetically ordered available badge catalog. |
+| `tshirt://layouts/{id}` | Future | Persisted or temporary computed layout. |
+| `tshirt://templates/{id}` | Future | Saved template configuration. |
+| `tshirt://uploads` | Future | Uploaded artwork metadata. |
+
+Example resource read:
+
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 1,
+  "method": "resources/read",
+  "params": {"uri": "tshirt://options"}
+}
+```
+
+### MCP Prompts
+
+The endpoint responds to `prompts/list` with prompt suggestions and `prompts/get` with a single text message template:
+
+- `design_tshirt_template`: Ask an agent to choose badges/layout options for a described shirt concept.
+- `optimize_cut_sheet`: Ask an agent to reduce wasted transfer paper while respecting badge sizes.
+- `explain_layout`: Ask an agent to describe why a placement mode was chosen.
 
 ### Implemented MCP Tools
 
@@ -294,7 +428,13 @@ Inputs:
 }
 ```
 
-Outputs a badge list.
+Outputs a badge list. Optional `include_logo: true` appends the reserved MakeSpace logo badge.
+
+#### `get_options`
+
+Inputs: `{}`
+
+Outputs the same supported options/defaults payload as `/api/v1/options`, plus a text content item for clients that display tool-call summaries.
 
 #### `compute_layout`
 
@@ -308,11 +448,11 @@ Inputs:
 }
 ```
 
-Outputs page dimensions, panel layouts, placements, and warnings.
+Outputs page dimensions, normalized options, panel layouts, and placements in `structuredContent`, plus a text content item.
 
 #### `render_pdf`
 
-Not implemented yet. Planned inputs:
+Inputs:
 
 ```json
 {
@@ -322,11 +462,11 @@ Not implemented yet. Planned inputs:
 }
 ```
 
-It should output either PDF bytes as an MCP blob or a local file/resource reference.
+Outputs `mime_type`, `filename`, `byte_length`, base64-encoded PDF bytes in `pdf_base64`, and a `resource` object with `uri`, `mimeType`, and `blob`. The tool result also includes text and resource content items for clients that prefer MCP content blocks.
 
 #### `upload_badge_artwork`
 
-Not implemented yet. Planned inputs:
+Inputs:
 
 ```json
 {
@@ -335,19 +475,15 @@ Not implemented yet. Planned inputs:
 }
 ```
 
-It should output the created badge record.
+Outputs the created badge record or an MCP invalid-params error when the filename/content is unsupported, empty, over the upload size limit, or not valid base64.
 
 #### `validate_template`
 
-Not implemented yet. It should input a template request and return normalized options, errors, warnings, and estimated placement density.
+Inputs a template request and returns the normalized layout payload plus warnings such as unknown badge IDs or empty layouts. This tool is useful before calling `render_pdf` when an agent needs to explain or repair a request.
 
-### MCP Prompts
+### MCP Error Behavior
 
-Potential prompts:
-
-- `design_tshirt_template`: Ask an agent to choose badges/layout options for a described shirt concept.
-- `optimize_cut_sheet`: Ask an agent to reduce wasted transfer paper while respecting badge sizes.
-- `explain_layout`: Ask an agent to describe why a placement mode was chosen.
+Unknown resources, unknown tools, invalid prompts, invalid methods, and invalid base64 uploads return JSON-RPC error objects. Invalid upload arguments use code `-32602` to match JSON-RPC invalid params. The Flask endpoint returns these JSON-RPC errors with HTTP 200 for broad client compatibility.
 
 ### MCP Security Considerations
 
@@ -357,10 +493,14 @@ Potential prompts:
 - Any future authenticated deployment should scope uploads/templates per user.
 - Exposed MCP resources should not leak local filesystem paths unless explicitly requested in a trusted development context.
 
+### Compatibility Methods
+
+The endpoint supports `initialize`, `ping`, `notifications/initialized`, `tools/list`, `tools/call`, `resources/list`, `resources/read`, `resources/templates/list`, `prompts/list`, and `prompts/get`. Initialize advertises `tools`, `resources`, and `prompts` capabilities with list-change notifications disabled.
+
 ### MCP Open Questions
 
 - Should MCP be served by the Flask app or a separate process?
 - Should MCP call internal Python functions directly or go through `/api/v1`?
-- How should generated PDFs be returned: bytes, local file handles, or URLs?
+- Should generated PDFs continue to be returned as base64 JSON, or should future MCP clients receive resource references or files?
 - Should upstream badge refresh be available to MCP clients by default?
 - What retention policy should apply to generated PDFs and temporary layouts?

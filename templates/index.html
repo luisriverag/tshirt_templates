@@ -22,9 +22,24 @@
         </div>
       </section>
 
-      <form class="refresh-form" method="post" action="/refresh">
-        <button type="submit" class="secondary-button">Refresh badges from GitHub</button>
-      </form>
+      <div class="top-actions">
+        <a class="button-link secondary-button" href="/calibration.pdf">Download calibration page</a>
+        <form class="refresh-form" method="post" action="/refresh">
+          <button type="submit" class="secondary-button">Refresh badges from GitHub</button>
+        </form>
+      </div>
+
+
+      {% if upload_messages %}
+        <section class="panel alert-list" role="status" aria-live="polite">
+          <h2>Upload notices</h2>
+          <ul>
+            {% for message in upload_messages %}
+              <li>{{ message }}</li>
+            {% endfor %}
+          </ul>
+        </section>
+      {% endif %}
 
       <form class="generator" method="post" action="/preview" enctype="multipart/form-data">
         <section class="panel controls">
@@ -89,6 +104,22 @@
               </select>
               <small>Copy counts are limited to 1–24 to avoid oversized PDFs and layouts too dense to cut cleanly.</small>
             </label>
+            <label>Front text
+              <input type="text" name="front_text" maxlength="64" placeholder="e.g. Ada" aria-describedby="front-text-help">
+              <small id="front-text-help">Optional name or short label printed on the front panel.</small>
+            </label>
+            <label>Back text
+              <input type="text" name="back_text" maxlength="64" placeholder="e.g. MakeSpace Madrid" aria-describedby="back-text-help">
+              <small id="back-text-help">Optional name or short label printed on the back panel.</small>
+            </label>
+            <label>Text font
+              <select name="text_font">
+                {% for value, label in text_fonts.items() %}
+                  <option value="{{ value }}" {% if value == "ubuntu" %}selected{% endif %}>{{ label }}</option>
+                {% endfor %}
+              </select>
+              <small>Ubuntu is the default, with other print-friendly font choices available.</small>
+            </label>
             <label>Logo size
               <select name="logo_size" id="logo-size-select">
                 {% for amount in logo_size_options[default_unit] %}
@@ -107,6 +138,8 @@
           <input type="hidden" name="include_logo" value="off">
           <label class="inline"><input type="checkbox" name="mirror" value="on" checked> Mirror PDF for sublimation transfer</label>
           <input type="hidden" name="mirror" value="off">
+          <label class="inline"><input type="checkbox" name="include_print_marks" value="on"> Add crop and registration marks</label>
+          <input type="hidden" name="include_print_marks" value="off">
           <label>Upload badge artwork
             <input type="file" name="uploads" multiple accept=".svg,.png,.jpg,.jpeg,image/svg+xml,image/png,image/jpeg">
             <small>Uploaded SVG, PNG, or JPG files are saved locally and included in this template.</small>
@@ -118,13 +151,38 @@
             <h2>Badges</h2>
             <span>{{ badges|length }} image assets</span>
           </div>
-          <div class="badge-grid">
+          <p class="hint">All badges are selected by default. Search, filter by category, bulk-select the visible cards, or drag cards to set the initial selection order.</p>
+          <div class="badge-toolbar" aria-label="Badge search and bulk selection">
+            <label>Search badges
+              <input type="search" id="badge-search" placeholder="Name or path" autocomplete="off">
+            </label>
+            <label>Category
+              <select id="badge-category-filter">
+                <option value="all">All categories</option>
+                {% for category in badge_categories %}
+                  <option value="{{ category|lower }}">{{ category }}</option>
+                {% endfor %}
+              </select>
+            </label>
+            <button type="button" class="secondary-button" id="select-visible-badges">Select visible</button>
+            <button type="button" class="secondary-button" id="clear-visible-badges">Clear visible</button>
+          </div>
+          <div class="badge-grid" id="badge-grid">
             {% for badge in badges %}
-              <label class="badge-card">
+              {% set badge_category = badge.path.rsplit('/', 1)[0] if '/' in badge.path else 'Uncategorized' %}
+              <label class="badge-card" draggable="true" data-name="{{ badge.name|lower }}" data-path="{{ badge.path|lower }}" data-category="{{ badge_category|lower }}">
+                <span class="drag-handle" aria-hidden="true">↕ Drag</span>
                 <input type="checkbox" name="badges" value="{{ badge.id }}" {% if badge.id in selected_ids %}checked{% endif %}>
                 <span class="thumb"><img src="{{ badge.raw_url }}" alt="{{ badge.name }}" loading="lazy"></span>
                 <strong>{{ badge.name }}</strong>
                 <small>{{ badge.path }}</small>
+                {% if badge.id[:7] == 'upload:' %}
+                  <span class="upload-card-actions">
+                    <input type="file" name="replacement_upload" accept=".svg,.png,.jpg,.jpeg,image/svg+xml,image/png,image/jpeg">
+                    <button type="submit" class="secondary-button upload-card-button" formaction="/uploads/replace" formmethod="post" name="replace_upload" value="{{ badge.id[7:] }}">Replace upload</button>
+                    <button type="submit" class="secondary-button upload-card-button" formaction="/uploads/delete" formmethod="post" name="delete_upload" value="{{ badge.id[7:] }}">Delete upload</button>
+                  </span>
+                {% endif %}
               </label>
             {% endfor %}
           </div>
@@ -139,6 +197,9 @@
 
     <script>
       const unitSelect = document.querySelector('#unit-select');
+      const badgeGrid = document.querySelector('#badge-grid');
+      const badgeSearch = document.querySelector('#badge-search');
+      const badgeCategoryFilter = document.querySelector('#badge-category-filter');
       const badgeSizeSelect = document.querySelector('#badge-size-select');
       const spacingSelect = document.querySelector('#spacing-select');
       const logoSizeSelect = document.querySelector('#logo-size-select');
@@ -171,6 +232,67 @@
 
       unitSelect.addEventListener('change', updateAmountSelectors);
       updateAmountSelectors();
+
+      function visibleBadgeCards() {
+        return [...badgeGrid.querySelectorAll('.badge-card')].filter((card) => !card.hidden);
+      }
+
+      function filterBadges() {
+        const query = badgeSearch.value.trim().toLowerCase();
+        const category = badgeCategoryFilter.value;
+        badgeGrid.querySelectorAll('.badge-card').forEach((card) => {
+          const matchesQuery = !query || card.dataset.name.includes(query) || card.dataset.path.includes(query);
+          const matchesCategory = category === 'all' || card.dataset.category === category;
+          card.hidden = !(matchesQuery && matchesCategory);
+        });
+      }
+
+      badgeSearch.addEventListener('input', filterBadges);
+      badgeCategoryFilter.addEventListener('change', filterBadges);
+      document.querySelector('#select-visible-badges').addEventListener('click', () => {
+        visibleBadgeCards().forEach((card) => { card.querySelector('input[type="checkbox"]').checked = true; });
+      });
+      document.querySelector('#clear-visible-badges').addEventListener('click', () => {
+        visibleBadgeCards().forEach((card) => { card.querySelector('input[type="checkbox"]').checked = false; });
+      });
+
+      let draggedCard = null;
+
+      function cardAfterPointer(container, y) {
+        const cards = [...container.querySelectorAll('.badge-card:not(.dragging-card)')];
+        return cards.reduce((closest, card) => {
+          const box = card.getBoundingClientRect();
+          const offset = y - box.top - box.height / 2;
+          if (offset < 0 && offset > closest.offset) {
+            return { offset, element: card };
+          }
+          return closest;
+        }, { offset: Number.NEGATIVE_INFINITY, element: null }).element;
+      }
+
+      badgeGrid.addEventListener('dragstart', (event) => {
+        draggedCard = event.target.closest('.badge-card');
+        if (!draggedCard) return;
+        draggedCard.classList.add('dragging-card');
+        event.dataTransfer.effectAllowed = 'move';
+        event.dataTransfer.setData('text/plain', draggedCard.querySelector('strong').textContent);
+      });
+
+      badgeGrid.addEventListener('dragover', (event) => {
+        event.preventDefault();
+        if (!draggedCard) return;
+        const afterElement = cardAfterPointer(badgeGrid, event.clientY);
+        if (afterElement) {
+          badgeGrid.insertBefore(draggedCard, afterElement);
+        } else {
+          badgeGrid.appendChild(draggedCard);
+        }
+      });
+
+      badgeGrid.addEventListener('dragend', () => {
+        if (draggedCard) draggedCard.classList.remove('dragging-card');
+        draggedCard = null;
+      });
     </script>
   </body>
 </html>

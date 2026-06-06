@@ -2,12 +2,15 @@
 
 from __future__ import annotations
 
+import base64
+import binascii
+import json
 from pathlib import Path
 
-from flask import Flask, Response, jsonify, redirect, render_template, request, send_from_directory, url_for
+from flask import Flask, Response, flash, get_flashed_messages, jsonify, redirect, render_template, request, send_from_directory, url_for
 
-from .badges import Badge, get_badges_by_id, list_badges, order_badges, refresh_badges
-from .layout import PanelLayout, Placement, place_badges
+from .badges import Badge, badge_category, get_badges_by_id, list_badges, order_badges, refresh_badges
+from .layout import PanelLayout, Placement, page_size_points, place_badges
 from .options import (
     BADGE_AMOUNTS,
     CENTIMETERS_PER_INCH,
@@ -19,7 +22,14 @@ from .options import (
     SPACING_AMOUNTS,
     parse_layout_options,
 )
-from .uploads import list_uploaded_badges, save_uploaded_badges
+from .uploads import (
+    delete_uploaded_badge,
+    list_uploaded_badges,
+    replace_uploaded_badge_bytes_with_warnings,
+    save_uploaded_badge_bytes_with_warnings,
+    save_uploaded_badges_with_warnings,
+    upload_warnings_to_dicts,
+)
 
 LAYOUT_MODES = {
     "grid": "Grid",
@@ -49,6 +59,13 @@ ORDER_MODES = {
 UNITS = {
     "cm": "Centimeters",
     "in": "Inches",
+}
+TEXT_FONTS = {
+    "ubuntu": "Ubuntu",
+    "helvetica": "Helvetica",
+    "times": "Times",
+    "courier": "Courier",
+    "dejavu": "DejaVu Sans",
 }
 BADGE_SIZE_OPTIONS = {
     unit: sorted(amounts, key=float) for unit, amounts in BADGE_AMOUNTS.items()
@@ -137,6 +154,7 @@ def options_payload() -> dict:
         "layout_modes": LAYOUT_MODES,
         "order_modes": ORDER_MODES,
         "units": UNITS,
+        "text_fonts": TEXT_FONTS,
         "badge_size_options": BADGE_SIZE_OPTIONS,
         "spacing_options": SPACING_OPTIONS,
         "logo_size_options": LOGO_SIZE_OPTIONS,
@@ -154,6 +172,10 @@ def options_payload() -> dict:
             "order": "selected",
             "sides": ["front", "back"],
             "mirror": True,
+            "include_print_marks": False,
+            "front_text": "",
+            "back_text": "",
+            "text_font": "ubuntu",
         },
     }
 
@@ -293,14 +315,16 @@ def create_app() -> Flask:
     app = Flask(__name__, template_folder="../templates", static_folder="../static")
     app.config.setdefault("UPLOAD_FOLDER", str(Path(app.instance_path) / "uploads"))
     app.config.setdefault("MAX_CONTENT_LENGTH", 32 * 1024 * 1024)
+    app.secret_key = app.config.get("SECRET_KEY") or "dev-upload-warnings"
 
     @app.get("/")
     def index() -> str:
         badges = _available_badges()
-        selected_ids = [badge.id for badge in badges[: min(8, len(badges))]]
+        selected_ids = [badge.id for badge in badges]
         return render_template(
             "index.html",
             badges=badges,
+            badge_categories=sorted({badge_category(badge) for badge in badges}),
             selected_ids=selected_ids,
             modes=LAYOUT_MODES,
             page_sizes=PAGE_SIZES,
@@ -315,6 +339,8 @@ def create_app() -> Flask:
             spacing_options=SPACING_OPTIONS,
             logo_size_options=LOGO_SIZE_OPTIONS,
             copy_options=COPY_OPTIONS,
+            text_fonts=TEXT_FONTS,
+            upload_messages=get_flashed_messages(),
         )
 
     @app.post("/refresh")
@@ -325,6 +351,27 @@ def create_app() -> Flask:
     @app.get("/uploads/<path:filename>")
     def uploaded_file(filename: str) -> Response:
         return send_from_directory(_upload_folder(), filename)
+
+    @app.post("/uploads/delete")
+    def delete_upload() -> Response:
+        delete_uploaded_badge(request.form.get("delete_upload", ""), _upload_folder())
+        return redirect(url_for("index"))
+
+    @app.post("/uploads/replace")
+    def replace_upload() -> Response:
+        filename = request.form.get("replace_upload", "")
+        upload = _first_uploaded_file("replacement_upload")
+        if not upload:
+            flash("Choose a replacement image before using Replace upload.")
+        else:
+            badge, warnings = replace_uploaded_badge_bytes_with_warnings(
+                filename, upload.read(), _upload_folder()
+            )
+            if not badge:
+                flash("Replacement upload must be a valid SVG, PNG, JPG, or JPEG image within the size limit.")
+            for warning in warnings:
+                flash(warning.message)
+        return redirect(url_for("index"))
 
     @app.get("/api/v1/health")
     def api_health() -> Response:
@@ -345,11 +392,91 @@ def create_app() -> Flask:
             badges = [*badges, LOGO_BADGE]
         return jsonify({"badges": [badge_to_dict(badge) for badge in badges]})
 
+    @app.post("/api/v1/uploads")
+    def api_uploads() -> Response:
+        upload_result = save_uploaded_badges_with_warnings(request.files.getlist("uploads"), _upload_folder())
+        if not upload_result.badges:
+            return _api_error(
+                "invalid_upload",
+                "Upload at least one SVG, PNG, JPG, or JPEG image under the uploads field.",
+                400,
+                field="uploads",
+            )
+        return (
+            jsonify(
+                {
+                    "badges": [badge_to_dict(badge) for badge in upload_result.badges],
+                    "warnings": upload_warnings_to_dicts(upload_result.warnings),
+                }
+            ),
+            201,
+        )
+
+    @app.delete("/api/v1/uploads/<path:filename>")
+    def api_delete_upload(filename: str) -> Response:
+        if not delete_uploaded_badge(filename, _upload_folder()):
+            return _api_error(
+                "upload_not_found",
+                "No uploaded badge exists for that filename.",
+                404,
+                field="filename",
+            )
+        return jsonify({"deleted": filename})
+
+    @app.put("/api/v1/uploads/<path:filename>")
+    def api_replace_upload(filename: str) -> Response:
+        upload = _first_uploaded_file("upload") or _first_uploaded_file("replacement_upload")
+        if not upload:
+            return _api_error(
+                "invalid_upload",
+                "Upload one replacement SVG, PNG, JPG, or JPEG image under the upload field.",
+                400,
+                field="upload",
+            )
+        badge, warnings = replace_uploaded_badge_bytes_with_warnings(
+            filename, upload.read(), _upload_folder()
+        )
+        if not badge:
+            return _api_error(
+                "upload_not_found",
+                "No uploaded badge exists for that filename, or the replacement is invalid, empty, or too large.",
+                404,
+                field="filename",
+            )
+        return jsonify({"badge": badge_to_dict(badge), "warnings": upload_warnings_to_dicts(warnings)})
+
     @app.post("/api/v1/layouts/preview")
     def api_layout_preview() -> Response:
         payload = request.get_json(silent=True) or {}
         result = _layout_from_json(payload)
         return jsonify(result)
+
+    @app.post("/api/v1/pdfs")
+    def api_pdf() -> Response:
+        payload = request.get_json(silent=True)
+        if not isinstance(payload, dict):
+            return _api_error(
+                "invalid_json",
+                "Submit a JSON object with badge_ids, options, and optional manual_placements.",
+                400,
+            )
+        options, render_badges, page_size, layouts = _json_layout_parts(payload)
+        from .pdf import render_pdf
+
+        content = render_pdf(
+            render_badges,
+            page_size,
+            layouts,
+            mirror=options.mirror,
+            panel_text=_panel_text_options(options),
+            print_marks=options.include_print_marks,
+            metadata=_pdf_metadata(options),
+        )
+        return Response(
+            content,
+            mimetype="application/pdf",
+            headers={"Content-Disposition": "attachment; filename=tshirt-badge-template.pdf"},
+        )
 
     @app.get("/mcp")
     def mcp_metadata() -> Response:
@@ -359,12 +486,11 @@ def create_app() -> Flask:
     def mcp_json_rpc() -> Response:
         message = request.get_json(silent=True) or {}
         response = _handle_mcp_message(message)
-        status = 400 if "error" in response else 200
-        return jsonify(response), status
+        return jsonify(response)
 
     @app.post("/preview")
     def preview() -> str:
-        badge_ids, badges = _selected_badges_with_uploads()
+        badge_ids, badges, upload_warnings = _selected_badges_with_uploads()
         page_size, layouts = _layout_from_form(badge_ids)
         layouts = _append_logo_placements(layouts)
         layouts = _apply_manual_placements(layouts, page_size)
@@ -379,17 +505,50 @@ def create_app() -> Flask:
             selected_ids=badge_ids,
             unit=_layout_options().unit,
             points_per_unit=_points_per_unit(_layout_options().unit),
+            upload_warnings=upload_warnings_to_dicts(upload_warnings),
+        )
+
+
+    @app.get("/calibration.pdf")
+    def calibration_pdf() -> Response:
+        from .pdf import render_calibration_pdf
+
+        raw_options = {
+            "page_size": request.args.get("page_size", "a4"),
+            "orientation": request.args.get("orientation", "portrait"),
+            "unit": request.args.get("unit", DEFAULT_UNIT),
+            "mirror": request.args.get("mirror", "off"),
+        }
+        options = parse_layout_options(raw_options, lambda key: [])
+        content = render_calibration_pdf(
+            page_size_points(options.page_size, options.orientation),
+            unit=options.unit,
+            mirror=options.mirror,
+        )
+        return Response(
+            content,
+            mimetype="application/pdf",
+            headers={"Content-Disposition": "attachment; filename=tshirt-calibration-page.pdf"},
         )
 
     @app.post("/pdf")
     def pdf() -> Response:
-        badge_ids, badges = _selected_badges_with_uploads()
+        badge_ids, badges, _upload_warnings = _selected_badges_with_uploads()
         page_size, layouts = _layout_from_form(badge_ids)
         layouts = _append_logo_placements(layouts)
         layouts = _apply_manual_placements(layouts, page_size)
         from .pdf import render_pdf
 
-        content = render_pdf(badges, page_size, layouts, mirror=_layout_options().mirror)
+        options = _layout_options()
+        content = render_pdf(
+            badges,
+            page_size,
+            layouts,
+            mirror=options.mirror,
+            panel_text=_panel_text_options(options),
+            print_marks=options.include_print_marks,
+            metadata=_pdf_metadata(options),
+        )
         return Response(
             content,
             mimetype="application/pdf",
@@ -402,17 +561,43 @@ def create_app() -> Flask:
     def _available_badges():
         return [*list_badges(), *list_uploaded_badges(_upload_folder())]
 
-    def _selected_badges_with_uploads() -> tuple[list[str], list]:
-        uploaded = save_uploaded_badges(request.files.getlist("uploads"), _upload_folder())
-        badge_ids = [*request.form.getlist("badges"), *[badge.id for badge in uploaded]]
+    def _selected_badges_with_uploads() -> tuple[list[str], list, list]:
+        upload_result = save_uploaded_badges_with_warnings(
+            request.files.getlist("uploads"), _upload_folder()
+        )
+        badge_ids = [*request.form.getlist("badges"), *[badge.id for badge in upload_result.badges]]
         badges = get_badges_by_id(badge_ids, _upload_folder())
         options = _layout_options()
         ordered_badges = order_badges(badges, options.order)
         render_badges = [*ordered_badges, LOGO_BADGE] if options.include_logo else ordered_badges
-        return [badge.id for badge in ordered_badges], render_badges
+        return [badge.id for badge in ordered_badges], render_badges, upload_result.warnings
 
     def _layout_options():
         return parse_layout_options(request.form, request.form.getlist)
+
+    def _panel_text_options(options) -> dict[str, str]:
+        return {
+            "front": options.front_text,
+            "back": options.back_text,
+            "font": options.text_font,
+        }
+
+    def _pdf_metadata(options) -> dict[str, str]:
+        return {
+            "page_size": options.page_size,
+            "orientation": options.orientation,
+            "mode": options.mode,
+            "unit": options.unit,
+            "badge_size": options.badge_size,
+            "spacing": options.spacing,
+            "copies": str(options.copies),
+            "order": options.order,
+            "sides": ",".join(options.sides),
+            "mirror": str(options.mirror).lower(),
+            "include_logo": str(options.include_logo).lower(),
+            "include_print_marks": str(options.include_print_marks).lower(),
+            "text_font": options.text_font,
+        }
 
     def _layout_from_form(badge_ids: list[str]):
         options = _layout_options()
@@ -489,12 +674,35 @@ def create_app() -> Flask:
     def _points_per_unit(unit: str) -> float:
         return points_per_unit(unit)
 
-    def _layout_from_json(payload: dict) -> dict:
+    def _first_uploaded_file(field_name: str):
+        for upload in request.files.getlist(field_name):
+            if getattr(upload, "filename", ""):
+                return upload
+        return None
+
+    def _api_error(
+        code: str,
+        message: str,
+        status: int,
+        field: str | None = None,
+        allowed_values: list[str] | None = None,
+    ) -> tuple[Response, int]:
+        error: dict[str, str | list[str]] = {"code": code, "message": message}
+        if field:
+            error["field"] = field
+        if allowed_values:
+            error["allowed_values"] = allowed_values
+        return jsonify({"error": error}), status
+
+    def _json_layout_parts(payload: dict):
         raw_options = payload.get("options", {})
         if not isinstance(raw_options, dict):
             raw_options = {}
         options = parse_layout_options(json_form_values(raw_options), json_getlist(raw_options))
-        badge_ids = [str(badge_id) for badge_id in payload.get("badge_ids", [])]
+        raw_badge_ids = payload.get("badge_ids", [])
+        if not isinstance(raw_badge_ids, list):
+            raw_badge_ids = []
+        badge_ids = [str(badge_id) for badge_id in raw_badge_ids]
         badges = get_badges_by_id(badge_ids, _upload_folder())
         ordered_badges = order_badges(badges, options.order)
         ordered_ids = [badge.id for badge in ordered_badges]
@@ -511,9 +719,16 @@ def create_app() -> Flask:
         )
         if options.include_logo:
             layouts = append_logo_placements(layouts, options.logo_size_inches)
+        manual_placements = payload.get("manual_placements", [])
+        if not isinstance(manual_placements, list):
+            manual_placements = []
         layouts = apply_json_manual_placements(
-            layouts, page_size[1], options.unit, payload.get("manual_placements", [])
+            layouts, page_size[1], options.unit, manual_placements
         )
+        return options, render_badges, page_size, layouts
+
+    def _layout_from_json(payload: dict) -> dict:
+        options, render_badges, page_size, layouts = _json_layout_parts(payload)
         divisor = points_per_unit(options.unit)
         return {
             "page": {
@@ -537,6 +752,10 @@ def create_app() -> Flask:
                 "order": options.order,
                 "sides": options.sides,
                 "mirror": options.mirror,
+                "include_print_marks": options.include_print_marks,
+                "front_text": options.front_text,
+                "back_text": options.back_text,
+                "text_font": options.text_font,
             },
         }
 
@@ -545,8 +764,15 @@ def create_app() -> Flask:
             "name": "tshirt_templates",
             "protocol": "mcp-json-rpc",
             "endpoint": "/mcp",
-            "capabilities": {"tools": True, "resources": True},
-            "tools": ["get_options", "list_badges", "compute_layout"],
+            "capabilities": {"tools": True, "resources": True, "prompts": True},
+            "tools": [
+                "get_options",
+                "list_badges",
+                "compute_layout",
+                "render_pdf",
+                "upload_badge_artwork",
+                "validate_template",
+            ],
             "resources": ["tshirt://options", "tshirt://badges"],
         }
 
@@ -580,6 +806,42 @@ def create_app() -> Flask:
                     },
                 },
             },
+            {
+                "name": "render_pdf",
+                "description": "Render a PDF from badge IDs, options, and optional manual placements.",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "badge_ids": {"type": "array", "items": {"type": "string"}},
+                        "options": {"type": "object"},
+                        "manual_placements": {"type": "array", "items": {"type": "object"}},
+                    },
+                },
+            },
+            {
+                "name": "upload_badge_artwork",
+                "description": "Save one base64-encoded badge artwork file and return its badge record.",
+                "inputSchema": {
+                    "type": "object",
+                    "required": ["filename", "content_base64"],
+                    "properties": {
+                        "filename": {"type": "string"},
+                        "content_base64": {"type": "string"},
+                    },
+                },
+            },
+            {
+                "name": "validate_template",
+                "description": "Return normalized options and warnings for a template request.",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "badge_ids": {"type": "array", "items": {"type": "string"}},
+                        "options": {"type": "object"},
+                        "manual_placements": {"type": "array", "items": {"type": "object"}},
+                    },
+                },
+            },
         ]
 
     def _mcp_result(message_id, payload: dict) -> dict:
@@ -587,6 +849,94 @@ def create_app() -> Flask:
 
     def _mcp_error(message_id, code: int, message: str) -> dict:
         return {"jsonrpc": "2.0", "id": message_id, "error": {"code": code, "message": message}}
+
+    def _mcp_tool_result(structured_content: dict, text: str | None = None) -> dict:
+        result = {"structuredContent": structured_content}
+        if text:
+            result["content"] = [{"type": "text", "text": text}]
+        return result
+
+    def _mcp_json_resource(uri: str, payload: dict) -> dict:
+        return {
+            "contents": [
+                {
+                    "uri": uri,
+                    "mimeType": "application/json",
+                    "text": json.dumps(payload, sort_keys=True),
+                }
+            ]
+        }
+
+    def _mcp_render_pdf(arguments: dict) -> dict:
+        options, render_badges, page_size, layouts = _json_layout_parts(arguments)
+        from .pdf import render_pdf
+
+        content = render_pdf(
+            render_badges,
+            page_size,
+            layouts,
+            mirror=options.mirror,
+            panel_text=_panel_text_options(options),
+            print_marks=options.include_print_marks,
+            metadata=_pdf_metadata(options),
+        )
+        encoded = base64.b64encode(content).decode("ascii")
+        return {
+            "mime_type": "application/pdf",
+            "filename": "tshirt-badge-template.pdf",
+            "pdf_base64": encoded,
+            "byte_length": len(content),
+            "resource": {
+                "uri": "tshirt://generated/tshirt-badge-template.pdf",
+                "mimeType": "application/pdf",
+                "blob": encoded,
+            },
+        }
+
+    def _mcp_upload_badge(arguments: dict) -> dict:
+        filename = str(arguments.get("filename", ""))
+        encoded_content = arguments.get("content_base64", "")
+        if not isinstance(encoded_content, str):
+            return {"error": {"code": "invalid_upload", "message": "content_base64 must be a string."}}
+        try:
+            content = base64.b64decode(encoded_content, validate=True)
+        except (binascii.Error, ValueError):
+            return {"error": {"code": "invalid_upload", "message": "content_base64 is not valid base64."}}
+        badge, warnings = save_uploaded_badge_bytes_with_warnings(filename, content, _upload_folder())
+        if not badge:
+            return {
+                "error": {
+                    "code": "invalid_upload",
+                    "message": "Upload one valid, non-empty SVG, PNG, JPG, or JPEG file within the size limit.",
+                    "field": "filename",
+                }
+            }
+        return {"badge": badge_to_dict(badge), "warnings": upload_warnings_to_dicts(warnings)}
+
+    def _mcp_validate_template(arguments: dict) -> dict:
+        normalized = _layout_from_json(arguments)
+        requested_ids = [str(badge_id) for badge_id in arguments.get("badge_ids", [])]
+        resolved_ids = {badge["id"] for badge in normalized["badges"]}
+        missing_ids = [badge_id for badge_id in requested_ids if badge_id not in resolved_ids]
+        warnings = []
+        if missing_ids:
+            warnings.append(
+                {
+                    "code": "unknown_badges",
+                    "message": "Some requested badge IDs were not found and will be skipped.",
+                    "badge_ids": missing_ids,
+                }
+            )
+        if not normalized["layouts"] or not any(
+            layout["placements"] for layout in normalized["layouts"]
+        ):
+            warnings.append(
+                {
+                    "code": "empty_layout",
+                    "message": "No badge placements were produced for this template.",
+                }
+            )
+        return {"normalized": normalized, "warnings": warnings}
 
     def _handle_mcp_message(message: dict) -> dict:
         method = message.get("method")
@@ -597,10 +947,18 @@ def create_app() -> Flask:
                 message_id,
                 {
                     "protocolVersion": "2024-11-05",
-                    "capabilities": {"tools": {}, "resources": {}},
+                    "capabilities": {
+                        "tools": {"listChanged": False},
+                        "resources": {"subscribe": False, "listChanged": False},
+                        "prompts": {"listChanged": False},
+                    },
                     "serverInfo": {"name": "tshirt_templates", "version": "0.1.0"},
                 },
             )
+        if method == "ping":
+            return _mcp_result(message_id, {})
+        if method == "notifications/initialized":
+            return _mcp_result(message_id, {})
         if method == "tools/list":
             return _mcp_result(message_id, {"tools": _mcp_tools()})
         if method == "resources/list":
@@ -608,16 +966,66 @@ def create_app() -> Flask:
                 message_id,
                 {
                     "resources": [
-                        {"uri": "tshirt://options", "name": "Template options"},
-                        {"uri": "tshirt://badges", "name": "Badge catalog"},
+                        {"uri": "tshirt://options", "name": "Template options", "mimeType": "application/json"},
+                        {"uri": "tshirt://badges", "name": "Badge catalog", "mimeType": "application/json"},
                     ]
+                },
+            )
+        if method == "resources/templates/list":
+            return _mcp_result(message_id, {"resourceTemplates": []})
+        if method == "resources/read":
+            uri = params.get("uri")
+            if uri == "tshirt://options":
+                return _mcp_result(message_id, _mcp_json_resource(uri, options_payload()))
+            if uri == "tshirt://badges":
+                badges = order_badges(_available_badges(), "alphabetical")
+                return _mcp_result(
+                    message_id,
+                    _mcp_json_resource(uri, {"badges": [badge_to_dict(badge) for badge in badges]}),
+                )
+            return _mcp_error(message_id, -32602, f"Unknown resource: {uri}")
+        if method == "prompts/list":
+            return _mcp_result(
+                message_id,
+                {
+                    "prompts": [
+                        {"name": "design_tshirt_template", "description": "Choose badges and layout options for a shirt concept."},
+                        {"name": "optimize_cut_sheet", "description": "Suggest options that reduce wasted transfer paper."},
+                        {"name": "explain_layout", "description": "Explain a computed layout and its print settings."},
+                    ]
+                },
+            )
+        if method == "prompts/get":
+            prompt_name = params.get("name")
+            prompts = {
+                "design_tshirt_template": "Choose badge IDs, layout options, panel text, and print settings for this shirt concept.",
+                "optimize_cut_sheet": "Suggest layout options that reduce transfer-paper waste while preserving badge legibility.",
+                "explain_layout": "Explain the selected placement mode, badge order, page setup, and PDF mirroring choices.",
+            }
+            if prompt_name not in prompts:
+                return _mcp_error(message_id, -32602, f"Unknown prompt: {prompt_name}")
+            return _mcp_result(
+                message_id,
+                {
+                    "description": prompts[prompt_name],
+                    "messages": [
+                        {
+                            "role": "user",
+                            "content": {"type": "text", "text": prompts[prompt_name]},
+                        }
+                    ],
                 },
             )
         if method == "tools/call":
             tool_name = params.get("name")
             arguments = params.get("arguments") or {}
+            if not isinstance(arguments, dict):
+                arguments = {}
             if tool_name == "get_options":
-                return _mcp_result(message_id, {"structuredContent": options_payload()})
+                return _mcp_result(
+                    message_id,
+                    _mcp_tool_result(options_payload(), "Returned supported template options and defaults."),
+                )
             if tool_name == "list_badges":
                 if arguments.get("refresh"):
                     refresh_badges()
@@ -625,12 +1033,30 @@ def create_app() -> Flask:
                 badges = order_badges(_available_badges(), order)
                 if arguments.get("include_logo"):
                     badges = [*badges, LOGO_BADGE]
+                payload = {"badges": [badge_to_dict(badge) for badge in badges]}
                 return _mcp_result(
                     message_id,
-                    {"structuredContent": {"badges": [badge_to_dict(badge) for badge in badges]}},
+                    _mcp_tool_result(payload, f"Returned {len(payload['badges'])} badges."),
                 )
             if tool_name == "compute_layout":
-                return _mcp_result(message_id, {"structuredContent": _layout_from_json(arguments)})
+                payload = _layout_from_json(arguments)
+                return _mcp_result(message_id, _mcp_tool_result(payload, "Computed template layout."))
+            if tool_name == "render_pdf":
+                payload = _mcp_render_pdf(arguments)
+                result = _mcp_tool_result(payload, f"Rendered {payload['byte_length']} PDF bytes.")
+                result["content"].append({"type": "resource", "resource": payload["resource"]})
+                return _mcp_result(message_id, result)
+            if tool_name == "upload_badge_artwork":
+                result = _mcp_upload_badge(arguments)
+                if "error" in result:
+                    return _mcp_error(message_id, -32602, result["error"]["message"])
+                return _mcp_result(message_id, _mcp_tool_result(result, "Uploaded badge artwork."))
+            if tool_name == "validate_template":
+                payload = _mcp_validate_template(arguments)
+                return _mcp_result(
+                    message_id,
+                    _mcp_tool_result(payload, f"Validation returned {len(payload['warnings'])} warnings."),
+                )
             return _mcp_error(message_id, -32602, f"Unknown tool: {tool_name}")
         return _mcp_error(message_id, -32601, f"Unknown MCP method: {method}")
 

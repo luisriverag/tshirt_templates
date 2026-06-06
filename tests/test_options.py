@@ -20,6 +20,10 @@ def test_parse_layout_options_accepts_valid_values():
         "logo_size": "3.0",
         "mirror": "on",
         "order": "category",
+        "front_text": "  Ada   Lovelace  ",
+        "back_text": "MakeSpace Madrid",
+        "text_font": "dejavu",
+        "include_print_marks": "on",
     }
 
     assert parse_layout_options(values, _getlist({"sides": ["back"]})) == LayoutOptions(
@@ -38,6 +42,10 @@ def test_parse_layout_options_accepts_valid_values():
         copies=3,
         order="category",
         mirror=True,
+        front_text="Ada Lovelace",
+        back_text="MakeSpace Madrid",
+        text_font="dejavu",
+        include_print_marks=True,
     )
 
 
@@ -54,6 +62,9 @@ def test_parse_layout_options_normalizes_invalid_values():
         "logo_size": "100",
         "mirror": "off",
         "order": "unknown",
+        "front_text": "x" * 80,
+        "text_font": "papyrus",
+        "include_print_marks": "maybe",
     }
 
     options = parse_layout_options(values, _getlist({"sides": ["front", "sleeve"]}))
@@ -74,6 +85,9 @@ def test_parse_layout_options_normalizes_invalid_values():
         copies=24,
         order="selected",
         mirror=False,
+        front_text="x" * 64,
+        text_font="ubuntu",
+        include_print_marks=False,
     )
 
 
