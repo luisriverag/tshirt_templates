@@ -62,3 +62,28 @@ def test_generate_pdf_from_file_rejects_non_object_json(tmp_path):
 
     with pytest.raises(ValueError, match="Template JSON must be an object"):
         generate_pdf_from_file(template, tmp_path / "template.pdf")
+
+
+def test_run_development_server_serves_app_api_and_mcp(monkeypatch):
+    calls = []
+
+    class StubApp:
+        def run(self, **kwargs):
+            calls.append(kwargs)
+
+    monkeypatch.setattr("tshirt_templates.cli.create_app", lambda: StubApp())
+
+    from tshirt_templates.cli import run_development_server
+
+    run_development_server(host="0.0.0.0", port=8080, debug=True)
+
+    assert calls == [{"host": "0.0.0.0", "port": 8080, "debug": True}]
+
+
+def test_cli_serve_command_runs_unified_server(monkeypatch):
+    calls = []
+    monkeypatch.setattr("tshirt_templates.cli.run_development_server", lambda **kwargs: calls.append(kwargs))
+
+    assert main(["serve", "--host", "0.0.0.0", "--port", "8080", "--debug"]) == 0
+
+    assert calls == [{"host": "0.0.0.0", "port": 8080, "debug": True}]

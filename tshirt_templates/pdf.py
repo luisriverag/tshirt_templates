@@ -101,6 +101,17 @@ def _font_name(font_key: str) -> str:
     return "Helvetica-Bold"
 
 
+def _draw_cut_line(pdf: canvas.Canvas, x: float, y: float, width: float, height: float) -> None:
+    """Draw a subtle dashed outline around a badge for hand cutting."""
+
+    pdf.saveState()
+    pdf.setStrokeColor(colors.HexColor("#111111"))
+    pdf.setLineWidth(0.5)
+    pdf.setDash(2, 2)
+    pdf.roundRect(x, y, width, height, 6, stroke=1, fill=0)
+    pdf.restoreState()
+
+
 def _draw_panel_text(
     pdf: canvas.Canvas,
     layout: PanelLayout,
@@ -224,6 +235,7 @@ def render_pdf(
     mirror: bool = True,
     panel_text: dict[str, str] | None = None,
     print_marks: bool = False,
+    cut_lines: bool = False,
     metadata: dict[str, str] | None = None,
 ) -> bytes:
     """Render selected badge layouts into a PDF byte string."""
@@ -263,6 +275,8 @@ def render_pdf(
             pdf.translate(placement.x + placement.width / 2, placement.y + placement.height / 2)
             pdf.rotate(placement.rotation)
             _draw_badge(pdf, badge, -placement.width / 2, -placement.height / 2, placement.width, placement.height)
+            if cut_lines:
+                _draw_cut_line(pdf, -placement.width / 2, -placement.height / 2, placement.width, placement.height)
             pdf.restoreState()
 
     pdf.showPage()

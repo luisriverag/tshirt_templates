@@ -20,4 +20,4 @@ Generate the preview snap-controls screenshot locally with:
 python scripts/render_preview_controls_screenshot.py docs/screenshots/preview-snap-controls.png
 ```
 
-The generated screenshot shows the preview toolbar controls for zoom, snap-to-grid, and snap-to-panel-edge placement.
+The generated screenshot shows the preview toolbar controls for zoom, snap-to-grid, snap-to-panel-edge placement, and high-contrast preview outlines.

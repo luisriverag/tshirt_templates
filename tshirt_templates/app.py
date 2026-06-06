@@ -173,6 +173,7 @@ def options_payload() -> dict:
             "sides": ["front", "back"],
             "mirror": True,
             "include_print_marks": False,
+            "include_cut_lines": False,
             "front_text": "",
             "back_text": "",
             "text_font": "ubuntu",
@@ -377,6 +378,23 @@ def create_app() -> Flask:
     def api_health() -> Response:
         return jsonify({"status": "ok", "service": "tshirt_templates"})
 
+    @app.get("/api/v1/ready")
+    def api_ready() -> Response:
+        upload_folder = Path(_upload_folder())
+        checks = {"upload_folder": "ok"}
+        status_code = 200
+        status = "ready"
+        try:
+            upload_folder.mkdir(parents=True, exist_ok=True)
+            if not upload_folder.is_dir():
+                raise OSError("Configured upload folder is not a directory.")
+        except OSError as error:
+            checks["upload_folder"] = "error"
+            status_code = 503
+            status = "not_ready"
+            app.logger.warning("Readiness check failed for upload folder: %s", error)
+        return jsonify({"status": status, "service": "tshirt_templates", "checks": checks}), status_code
+
     @app.get("/api/v1/options")
     def api_options() -> Response:
         return jsonify(options_payload())
@@ -470,6 +488,7 @@ def create_app() -> Flask:
             mirror=options.mirror,
             panel_text=_panel_text_options(options),
             print_marks=options.include_print_marks,
+            cut_lines=options.include_cut_lines,
             metadata=_pdf_metadata(options),
         )
         return Response(
@@ -547,6 +566,7 @@ def create_app() -> Flask:
             mirror=options.mirror,
             panel_text=_panel_text_options(options),
             print_marks=options.include_print_marks,
+            cut_lines=options.include_cut_lines,
             metadata=_pdf_metadata(options),
         )
         return Response(
@@ -596,6 +616,7 @@ def create_app() -> Flask:
             "mirror": str(options.mirror).lower(),
             "include_logo": str(options.include_logo).lower(),
             "include_print_marks": str(options.include_print_marks).lower(),
+            "include_cut_lines": str(options.include_cut_lines).lower(),
             "text_font": options.text_font,
         }
 
@@ -753,6 +774,7 @@ def create_app() -> Flask:
                 "sides": options.sides,
                 "mirror": options.mirror,
                 "include_print_marks": options.include_print_marks,
+                "include_cut_lines": options.include_cut_lines,
                 "front_text": options.front_text,
                 "back_text": options.back_text,
                 "text_font": options.text_font,
@@ -878,6 +900,7 @@ def create_app() -> Flask:
             mirror=options.mirror,
             panel_text=_panel_text_options(options),
             print_marks=options.include_print_marks,
+            cut_lines=options.include_cut_lines,
             metadata=_pdf_metadata(options),
         )
         encoded = base64.b64encode(content).decode("ascii")

@@ -140,6 +140,8 @@
           <input type="hidden" name="mirror" value="off">
           <label class="inline"><input type="checkbox" name="include_print_marks" value="on"> Add crop and registration marks</label>
           <input type="hidden" name="include_print_marks" value="off">
+          <label class="inline"><input type="checkbox" name="include_cut_lines" value="on"> Add badge cut-line outlines</label>
+          <input type="hidden" name="include_cut_lines" value="off">
           <label>Upload badge artwork
             <input type="file" name="uploads" multiple accept=".svg,.png,.jpg,.jpeg,image/svg+xml,image/png,image/jpeg">
             <small>Uploaded SVG, PNG, or JPG files are saved locally and included in this template.</small>
@@ -151,7 +153,8 @@
             <h2>Badges</h2>
             <span>{{ badges|length }} image assets</span>
           </div>
-          <p class="hint">All badges are selected by default. Search, filter by category, bulk-select the visible cards, or drag cards to set the initial selection order.</p>
+          <p class="hint" id="badge-picker-help">All badges are selected by default. Search, filter by category, bulk-select the visible cards, or drag cards to set the initial selection order.</p>
+          <a class="skip-badge-list" href="#template-actions">Skip badge list and continue to actions</a>
           <div class="badge-toolbar" aria-label="Badge search and bulk selection">
             <label>Search badges
               <input type="search" id="badge-search" placeholder="Name or path" autocomplete="off">
@@ -167,7 +170,7 @@
             <button type="button" class="secondary-button" id="select-visible-badges">Select visible</button>
             <button type="button" class="secondary-button" id="clear-visible-badges">Clear visible</button>
           </div>
-          <div class="badge-grid" id="badge-grid">
+          <div class="badge-grid" id="badge-grid" aria-describedby="badge-picker-help">
             {% for badge in badges %}
               {% set badge_category = badge.path.rsplit('/', 1)[0] if '/' in badge.path else 'Uncategorized' %}
               <label class="badge-card" draggable="true" data-name="{{ badge.name|lower }}" data-path="{{ badge.path|lower }}" data-category="{{ badge_category|lower }}">
@@ -188,7 +191,7 @@
           </div>
         </section>
 
-        <div class="actions">
+        <div class="actions" id="template-actions">
           <button type="submit">Preview template</button>
           <button type="submit" formaction="/pdf">Download PDF</button>
         </div>

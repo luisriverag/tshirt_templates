@@ -21,17 +21,48 @@ def _build_parser() -> argparse.ArgumentParser:
         "generate-pdf",
         help="Generate a PDF from a JSON template request file.",
     )
-    generate_pdf.add_argument("template", type=Path, help="JSON file with badge_ids, options, and optional manual_placements.")
-    generate_pdf.add_argument("output", type=Path, help="Destination PDF path.")
+    generate_pdf.add_argument(
+        "template",
+        type=Path,
+        help="JSON file with badge_ids, options, and optional manual_placements.",
+    )
+    generate_pdf.add_argument(
+        "output",
+        type=Path,
+        help="Destination PDF path.",
+    )
     generate_pdf.add_argument(
         "--upload-folder",
         type=Path,
         help="Folder containing previously uploaded badge artwork referenced by upload: IDs.",
     )
+
+    serve = subcommands.add_parser(
+        "serve",
+        help="Run the browser app, JSON API, and MCP endpoint in one Flask server.",
+    )
+    serve.add_argument(
+        "--host",
+        default="127.0.0.1",
+        help="Host interface for the development server (default: 127.0.0.1).",
+    )
+    serve.add_argument(
+        "--port",
+        type=int,
+        default=5000,
+        help="Port for the development server (default: 5000).",
+    )
+    serve.add_argument(
+        "--debug",
+        action="store_true",
+        help="Enable Flask debug mode.",
+    )
     return parser
 
 
-def generate_pdf_from_file(template_path: Path, output_path: Path, upload_folder: Path | None = None) -> bytes:
+def generate_pdf_from_file(
+    template_path: Path, output_path: Path, upload_folder: Path | None = None
+) -> bytes:
     """Generate PDF bytes from a JSON template file and write them to output_path."""
 
     payload = json.loads(template_path.read_text(encoding="utf-8"))
@@ -53,11 +84,24 @@ def generate_pdf_from_file(template_path: Path, output_path: Path, upload_folder
     return response.data
 
 
+def run_development_server(
+    host: str = "127.0.0.1", port: int = 5000, debug: bool = False
+) -> None:
+    """Run the Flask app that serves the browser UI, JSON API, and MCP endpoint."""
+
+    app = create_app()
+    app.run(host=host, port=port, debug=debug)
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     """Run the tshirt_templates command-line interface."""
 
     parser = _build_parser()
     args = parser.parse_args(argv)
+
+    if args.command == "serve":
+        run_development_server(host=args.host, port=args.port, debug=args.debug)
+        return 0
 
     if args.command == "generate-pdf":
         try:

@@ -8,7 +8,7 @@ from pathlib import Path
 from PIL import Image, ImageDraw, ImageFont
 
 WIDTH = 1200
-HEIGHT = 620
+HEIGHT = 680
 YELLOW = "#ffff00"
 BLACK = "#000000"
 TEXT = "#f0efed"
@@ -73,6 +73,9 @@ def render(output: Path) -> None:
     _checkbox(draw, panel[0] + 30, y, "Snap to panel edges", body_font)
     draw.text((panel[0] + 390, y), "Edge tolerance", fill=TEXT, font=body_font)
     _input(draw, panel[0] + 610, y - 4, "0.25", "cm", body_font)
+
+    y += 74
+    _checkbox(draw, panel[0] + 30, y, "High-contrast outlines", body_font)
 
     draw.text(
         (panel[0] + 28, panel[3] - 46),
