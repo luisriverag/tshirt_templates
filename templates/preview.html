@@ -18,6 +18,34 @@
         <p>{{ badges|length }} selected badges laid out across {{ layouts|length }} panel(s). Drag badges on the sheet or edit their coordinates below before downloading.</p>
       </section>
 
+
+      {% if upload_warnings %}
+        <section class="panel alert-list" role="status" aria-live="polite">
+          <h2>Upload notices</h2>
+          <ul>
+            {% for warning in upload_warnings %}
+              <li><strong>{{ warning.filename }}:</strong> {{ warning.message }}</li>
+            {% endfor %}
+          </ul>
+        </section>
+      {% endif %}
+
+      <section class="panel preview-tools" aria-label="Preview tools">
+        <label class="inline">Zoom
+          <input type="range" id="preview-zoom" min="60" max="180" value="100">
+          <span id="preview-zoom-value">100%</span>
+        </label>
+        <label class="inline"><input type="checkbox" id="snap-to-grid"> Snap to grid</label>
+        <label class="inline">Grid step
+          <input type="number" id="snap-step" min="0.1" step="0.1" value="0.5"> {{ unit }}
+        </label>
+        <label class="inline"><input type="checkbox" id="snap-to-panel-edges"> Snap to panel edges</label>
+        <label class="inline">Edge tolerance
+          <input type="number" id="edge-snap-tolerance" min="0.1" step="0.1" value="0.25"> {{ unit }}
+        </label>
+        <div id="preview-status" class="sr-status" role="status" aria-live="polite">Preview ready. Select a badge and use arrow keys to nudge it.</div>
+      </section>
+
       <div class="preview-wrap">
         <svg class="page-preview" viewBox="0 0 {{ page_width }} {{ page_height }}" role="img" aria-label="PDF template preview">
           <rect x="0" y="0" width="{{ page_width }}" height="{{ page_height }}" fill="white"/>
@@ -25,13 +53,18 @@
             {% set layout_index = loop.index0 %}
             <rect class="panel-outline" x="{{ layout.x }}" y="{{ page_height - layout.y - layout.height }}" width="{{ layout.width }}" height="{{ layout.height }}" rx="12"/>
             <text x="{{ layout.x + 10 }}" y="{{ page_height - layout.y - layout.height + 22 }}" class="panel-title">{{ layout.side|upper }}</text>
+            {% set panel_text = form.get(layout.side ~ '_text', '') %}
+            {% if panel_text %}
+              <text x="{{ layout.x + layout.width / 2 }}" y="{{ page_height - layout.y - 18 }}" class="panel-custom-text" font-family="{{ form.get('text_font', 'ubuntu')|replace('-', ' ') }}, Ubuntu, Helvetica, Arial, sans-serif" font-size="28">{{ panel_text }}</text>
+            {% endif %}
             {% for placement in layout.placements %}
               {% set placement_index = loop.index0 %}
               {% set badge = badge_lookup.get(placement.badge_id) %}
               {% if badge %}
-                <g class="draggable-badge" tabindex="0" role="button" aria-label="Move {{ badge.name }}" data-key="{{ layout_index }}_{{ placement_index }}" data-x="{{ placement.x }}" data-y="{{ page_height - placement.y - placement.height }}" data-width="{{ placement.width }}" data-height="{{ placement.height }}" data-rotation="{{ -placement.rotation }}">
+                <g class="draggable-badge" tabindex="0" role="button" aria-label="Move {{ badge.name }}" data-key="{{ layout_index }}_{{ placement_index }}" data-x="{{ placement.x }}" data-y="{{ page_height - placement.y - placement.height }}" data-width="{{ placement.width }}" data-height="{{ placement.height }}" data-rotation="{{ -placement.rotation }}" data-panel-x="{{ layout.x }}" data-panel-y="{{ page_height - layout.y - layout.height }}" data-panel-width="{{ layout.width }}" data-panel-height="{{ layout.height }}">
                   <title>{{ badge.name }}</title>
                   <g class="badge-transform" transform="translate({{ placement.x + placement.width / 2 }} {{ page_height - placement.y - placement.height / 2 }}) rotate({{ -placement.rotation }})">
+                    <rect class="collision-outline" x="{{ -placement.width / 2 }}" y="{{ -placement.height / 2 }}" width="{{ placement.width }}" height="{{ placement.height }}" rx="6"/>
                     <image href="{{ badge.raw_url }}" x="{{ -placement.width / 2 }}" y="{{ -placement.height / 2 }}" width="{{ placement.width }}" height="{{ placement.height }}" preserveAspectRatio="xMidYMid meet"/>
                   </g>
                 </g>
@@ -47,7 +80,14 @@
             <h2>Manual placement</h2>
             <span>Coordinates use {{ unit }} from the page’s top-left corner.</span>
           </div>
-          <p class="hint">Drag a badge in the preview or type X/Y/rotation values. Use the selected unit for fine alignment; the automatic layouts still use print-safe size and spacing presets.</p>
+          <p class="hint">Drag a badge, use arrow keys to nudge the focused badge (Shift = larger step), type X/Y/rotation values, or use the reset and rotation preset controls.</p>
+          <div class="manual-tools" aria-label="Manual placement shortcuts">
+            <button type="button" class="secondary-button" id="reset-manual-layout">Reset automatic placement</button>
+            <button type="button" class="secondary-button rotation-preset" data-rotation="0">Rotate 0°</button>
+            <button type="button" class="secondary-button rotation-preset" data-rotation="45">Rotate 45°</button>
+            <button type="button" class="secondary-button rotation-preset" data-rotation="90">Rotate 90°</button>
+            <button type="button" class="secondary-button rotation-preset" data-rotation="-45">Rotate -45°</button>
+          </div>
           <div class="coordinate-table-wrap">
             <table class="coordinate-table">
               <thead>
@@ -81,7 +121,7 @@
           </div>
         </section>
 
-        {% for key in ['page_size', 'orientation', 'mode', 'order', 'unit', 'badge_size', 'spacing', 'include_logo', 'logo_size', 'copies', 'mirror'] %}
+        {% for key in ['page_size', 'orientation', 'mode', 'order', 'unit', 'badge_size', 'spacing', 'include_logo', 'logo_size', 'copies', 'mirror', 'include_print_marks', 'front_text', 'back_text', 'text_font'] %}
           {% if form.get(key) %}<input type="hidden" name="{{ key }}" value="{{ form.get(key) }}">{% endif %}
         {% endfor %}
         {% for side in form.getlist('sides') %}<input type="hidden" name="sides" value="{{ side }}">{% endfor %}
@@ -95,13 +135,56 @@
     <script>
       const svg = document.querySelector('.page-preview');
       const pointsPerUnit = {{ points_per_unit }};
+      const previewZoom = document.querySelector('#preview-zoom');
+      const previewZoomValue = document.querySelector('#preview-zoom-value');
+      const snapToGrid = document.querySelector('#snap-to-grid');
+      const snapStep = document.querySelector('#snap-step');
+      const snapToPanelEdges = document.querySelector('#snap-to-panel-edges');
+      const edgeSnapTolerance = document.querySelector('#edge-snap-tolerance');
+      const status = document.querySelector('#preview-status');
       const inputs = new Map();
+      let selectedBadge = null;
       document.querySelectorAll('.manual-input').forEach((input) => {
         const key = input.dataset.key;
         if (!inputs.has(key)) inputs.set(key, {});
         inputs.get(key)[input.dataset.field] = input;
+        input.dataset.initial = input.value;
         input.addEventListener('input', () => updateBadgeFromInputs(key));
       });
+
+      function snap(value) {
+        if (!snapToGrid.checked) return value;
+        const step = Math.max(0.1, Number(snapStep.value) || 0.5) * pointsPerUnit;
+        return Math.round(value / step) * step;
+      }
+
+      function snapBadgeToPanelEdges(badge, x, y) {
+        if (!snapToPanelEdges.checked) return { x, y };
+        const tolerance = Math.max(0.1, Number(edgeSnapTolerance.value) || 0.25) * pointsPerUnit;
+        const width = Number(badge.dataset.width);
+        const height = Number(badge.dataset.height);
+        const panelX = Number(badge.dataset.panelX);
+        const panelY = Number(badge.dataset.panelY);
+        const panelRight = panelX + Number(badge.dataset.panelWidth);
+        const panelBottom = panelY + Number(badge.dataset.panelHeight);
+        let snappedX = x;
+        let snappedY = y;
+        if (Math.abs(x - panelX) <= tolerance) snappedX = panelX;
+        if (Math.abs(x + width - panelRight) <= tolerance) snappedX = panelRight - width;
+        if (Math.abs(y - panelY) <= tolerance) snappedY = panelY;
+        if (Math.abs(y + height - panelBottom) <= tolerance) snappedY = panelBottom - height;
+        return { x: snappedX, y: snappedY };
+      }
+
+      function snapBadgePosition(badge, x, y) {
+        const gridX = snap(x);
+        const gridY = snap(y);
+        return snapBadgeToPanelEdges(badge, gridX, gridY);
+      }
+
+      function setStatus(message) {
+        status.textContent = message;
+      }
 
       function setBadgeTransform(badge, x, y, rotation) {
         const width = Number(badge.dataset.width);
@@ -113,18 +196,17 @@
           'transform',
           `translate(${x + width / 2} ${y + height / 2}) rotate(${-rotation})`
         );
+        updateCollisionWarnings();
       }
 
       function updateBadgeFromInputs(key) {
         const badge = document.querySelector(`.draggable-badge[data-key="${key}"]`);
         const group = inputs.get(key);
         if (!badge || !group) return;
-        setBadgeTransform(
-          badge,
-          (Number(group.x.value) || 0) * pointsPerUnit,
-          (Number(group.y.value) || 0) * pointsPerUnit,
-          Number(group.rotation.value) || 0
-        );
+        const requestedX = (Number(group.x.value) || 0) * pointsPerUnit;
+        const requestedY = (Number(group.y.value) || 0) * pointsPerUnit;
+        const snapped = snapBadgePosition(badge, requestedX, requestedY);
+        setBadgeTransform(badge, snapped.x, snapped.y, Number(group.rotation.value) || 0);
       }
 
       function updateInputsFromBadge(badge) {
@@ -133,6 +215,28 @@
         group.x.value = (Number(badge.dataset.x) / pointsPerUnit).toFixed(2);
         group.y.value = (Number(badge.dataset.y) / pointsPerUnit).toFixed(2);
         group.rotation.value = (-Number(badge.dataset.rotation)).toFixed(1);
+      }
+
+      function updateCollisionWarnings() {
+        const badges = [...document.querySelectorAll('.draggable-badge')];
+        const collisions = new Set();
+        badges.forEach((first, firstIndex) => {
+          const a = { x: Number(first.dataset.x), y: Number(first.dataset.y), width: Number(first.dataset.width), height: Number(first.dataset.height) };
+          badges.slice(firstIndex + 1).forEach((second) => {
+            const b = { x: Number(second.dataset.x), y: Number(second.dataset.y), width: Number(second.dataset.width), height: Number(second.dataset.height) };
+            const overlaps = a.x < b.x + b.width && a.x + a.width > b.x && a.y < b.y + b.height && a.y + a.height > b.y;
+            if (overlaps) {
+              collisions.add(first);
+              collisions.add(second);
+            }
+          });
+        });
+        badges.forEach((badge) => badge.classList.toggle('collision', collisions.has(badge)));
+        if (collisions.size) {
+          setStatus(`${collisions.size} badges overlap. Move highlighted badges before printing.`);
+        } else if (status.textContent.includes('overlap')) {
+          setStatus('No badge overlaps detected.');
+        }
       }
 
       function svgPoint(event) {
@@ -147,6 +251,7 @@
         badge.addEventListener('pointerdown', (event) => {
           event.preventDefault();
           const point = svgPoint(event);
+          selectedBadge = badge;
           drag = {
             badge,
             offsetX: point.x - Number(badge.dataset.x),
@@ -160,8 +265,7 @@
       svg.addEventListener('pointermove', (event) => {
         if (!drag) return;
         const point = svgPoint(event);
-        const x = point.x - drag.offsetX;
-        const y = point.y - drag.offsetY;
+        const { x, y } = snapBadgePosition(drag.badge, point.x - drag.offsetX, point.y - drag.offsetY);
         setBadgeTransform(drag.badge, x, y, -Number(drag.badge.dataset.rotation));
         updateInputsFromBadge(drag.badge);
       });
@@ -169,8 +273,51 @@
       svg.addEventListener('pointerup', () => {
         if (!drag) return;
         drag.badge.classList.remove('dragging');
+        setStatus('Badge moved. Coordinates updated below.');
         drag = null;
       });
+
+      document.querySelectorAll('.draggable-badge').forEach((badge) => {
+        badge.addEventListener('focus', () => { selectedBadge = badge; });
+        badge.addEventListener('keydown', (event) => {
+          if (!['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(event.key)) return;
+          event.preventDefault();
+          const step = (event.shiftKey ? 1 : 0.1) * pointsPerUnit;
+          let x = Number(badge.dataset.x);
+          let y = Number(badge.dataset.y);
+          if (event.key === 'ArrowLeft') x -= step;
+          if (event.key === 'ArrowRight') x += step;
+          if (event.key === 'ArrowUp') y -= step;
+          if (event.key === 'ArrowDown') y += step;
+          const snapped = snapBadgePosition(badge, x, y);
+          setBadgeTransform(badge, snapped.x, snapped.y, -Number(badge.dataset.rotation));
+          updateInputsFromBadge(badge);
+          setStatus('Badge nudged with keyboard.');
+        });
+      });
+
+      document.querySelector('#reset-manual-layout').addEventListener('click', () => {
+        document.querySelectorAll('.manual-input').forEach((input) => { input.value = input.dataset.initial; });
+        inputs.forEach((_, key) => updateBadgeFromInputs(key));
+        setStatus('Manual edits reset to the automatic layout.');
+      });
+
+      document.querySelectorAll('.rotation-preset').forEach((button) => {
+        button.addEventListener('click', () => {
+          if (!selectedBadge) { setStatus('Select a badge before applying a rotation preset.'); return; }
+          const rotation = Number(button.dataset.rotation);
+          setBadgeTransform(selectedBadge, Number(selectedBadge.dataset.x), Number(selectedBadge.dataset.y), rotation);
+          updateInputsFromBadge(selectedBadge);
+          setStatus(`Applied ${rotation}° rotation preset.`);
+        });
+      });
+
+      previewZoom.addEventListener('input', () => {
+        svg.style.width = `${previewZoom.value}%`;
+        previewZoomValue.textContent = `${previewZoom.value}%`;
+      });
+
+      updateCollisionWarnings();
     </script>
   </body>
 </html>

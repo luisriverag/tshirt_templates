@@ -3,3 +3,6 @@ __pycache__/
 .pytest_cache/
 .venv/
 instance/
+
+# Generated visual review artifacts
+docs/screenshots/*.png
