@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from io import BytesIO
+from math import asin, degrees, pi, sqrt
 from pathlib import Path
 from tempfile import NamedTemporaryFile
 from xml.sax.saxutils import escape
@@ -51,6 +52,37 @@ def _fetch_asset(badge: Badge) -> bytes:
     response.raise_for_status()
     return response.content
 
+
+
+def verify_pdf_assets(badges: list[Badge]) -> list[dict[str, str]]:
+    """Return failures for badge artwork that cannot be fetched or rendered."""
+
+    failures: list[dict[str, str]] = []
+    checked_ids: set[str] = set()
+    for badge in badges:
+        if badge.id in checked_ids:
+            continue
+        checked_ids.add(badge.id)
+        try:
+            content = _fetch_asset(badge)
+            if badge.extension == ".svg" or content.lstrip().startswith(b"<svg"):
+                with NamedTemporaryFile(suffix=".svg") as svg_file:
+                    svg_file.write(content)
+                    svg_file.flush()
+                    drawing = svg2rlg(svg_file.name)
+                if not drawing:
+                    raise ValueError("SVG could not be parsed for PDF rendering.")
+            else:
+                ImageReader(BytesIO(content)).getSize()
+        except Exception as error:
+            failures.append(
+                {
+                    "badge_id": badge.id,
+                    "name": badge.name,
+                    "message": str(error) or error.__class__.__name__,
+                }
+            )
+    return failures
 
 def _draw_svg(pdf: canvas.Canvas, content: bytes, x: float, y: float, width: float, height: float) -> None:
     with NamedTemporaryFile(suffix=".svg") as svg_file:
@@ -111,6 +143,47 @@ def _draw_cut_line(pdf: canvas.Canvas, x: float, y: float, width: float, height:
     pdf.roundRect(x, y, width, height, 6, stroke=1, fill=0)
     pdf.restoreState()
 
+
+
+def _curved_placement(
+    layout: PanelLayout,
+    center_x: float,
+    center_y: float,
+    rotation: float,
+    curve_settings: dict[str, float] | None,
+) -> tuple[float, float, float]:
+    if not curve_settings:
+        return center_x, center_y, rotation
+    diameter_inches = curve_settings.get("diameter_inches", 0.0)
+    radius = max(36.0, diameter_inches * 72.0 / 2.0)
+    panel_center_x = layout.x + layout.width / 2.0
+    offset_x = max(-radius * 0.95, min(radius * 0.95, center_x - panel_center_x))
+    sagitta = radius - sqrt(max(0.0, radius * radius - offset_x * offset_x))
+    theta = degrees(asin(offset_x / radius))
+    return center_x, center_y - sagitta, rotation + theta
+
+
+def _draw_curve_guide(pdf: canvas.Canvas, layout: PanelLayout, curve_settings: dict[str, float] | None) -> None:
+    if not curve_settings:
+        return
+    pdf.saveState()
+    pdf.setStrokeColor(colors.HexColor("#2f80ed"))
+    pdf.setFillColor(colors.HexColor("#2f80ed"))
+    pdf.setDash(2, 4)
+    pdf.setLineWidth(0.5)
+    center_x = layout.x + layout.width / 2.0
+    pdf.line(center_x, layout.y, center_x, layout.y + layout.height)
+    pdf.setDash()
+    pdf.setFont("Helvetica", 7)
+    diameter = curve_settings.get("diameter_inches", 0.0)
+    circumference = diameter * pi
+    device = str(curve_settings.get("device", "custom")).replace("-", " ")
+    pdf.drawCentredString(
+        center_x,
+        layout.y + 4,
+        f"curve guide: {device}; diameter {diameter:.2f} in; circumference {circumference:.2f} in",
+    )
+    pdf.restoreState()
 
 def _draw_panel_text(
     pdf: canvas.Canvas,
@@ -236,6 +309,7 @@ def render_pdf(
     panel_text: dict[str, str] | None = None,
     print_marks: bool = False,
     cut_lines: bool = False,
+    curve_settings: dict[str, float] | None = None,
     metadata: dict[str, str] | None = None,
 ) -> bytes:
     """Render selected badge layouts into a PDF byte string."""
@@ -266,14 +340,22 @@ def render_pdf(
         pdf.drawString(layout.x + 10, layout.y + layout.height - 18, layout.side.upper())
 
         _draw_panel_text(pdf, layout, panel_text)
+        _draw_curve_guide(pdf, layout, curve_settings)
 
         for placement in layout.placements:
             badge = badge_lookup.get(placement.badge_id)
             if not badge:
                 continue
             pdf.saveState()
-            pdf.translate(placement.x + placement.width / 2, placement.y + placement.height / 2)
-            pdf.rotate(placement.rotation)
+            curved_x, curved_y, curved_rotation = _curved_placement(
+                layout,
+                placement.x + placement.width / 2,
+                placement.y + placement.height / 2,
+                placement.rotation,
+                curve_settings,
+            )
+            pdf.translate(curved_x, curved_y)
+            pdf.rotate(curved_rotation)
             _draw_badge(pdf, badge, -placement.width / 2, -placement.height / 2, placement.width, placement.height)
             if cut_lines:
                 _draw_cut_line(pdf, -placement.width / 2, -placement.height / 2, placement.width, placement.height)

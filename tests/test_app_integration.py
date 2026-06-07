@@ -31,7 +31,14 @@ def test_index_renders_badge_picker(monkeypatch):
     assert b"Generate front & back t-shirt badge PDF templates" in response.data
     assert b'class="brand-mark"' in response.data
     assert b"Template workflow" in response.data
+    assert b"1. Page and layout" in response.data
+    assert b"2. Badge size and labels" in response.data
+    assert b"3. PDF output" in response.data
     assert b"Download calibration page" in response.data
+    assert b"Quick print guide" in response.data
+    assert b"Mirror transfers" in response.data
+    assert b"Leave cut spacing" in response.data
+    assert b"Measure curves" in response.data
     assert b'href="/calibration.pdf"' in response.data
     assert b"M pixel shape" in response.data
     assert b"Circle wreath" in response.data
@@ -47,6 +54,9 @@ def test_index_renders_badge_picker(monkeypatch):
     assert b"Logo size" in response.data
     assert b"Badge order" in response.data
     assert b"All badges are selected by default" in response.data
+    assert b"selected-badge-count" in response.data
+    assert b"visible-badge-count" in response.data
+    assert b"Circumference: about" in response.data
     assert b"Search badges" in response.data
     assert b"Skip badge list and continue to actions" in response.data
     assert b'id="badge-picker-help"' in response.data
@@ -66,6 +76,9 @@ def test_index_renders_badge_picker(monkeypatch):
     assert b'name="include_print_marks" value="off"' in response.data
     assert b"Add badge cut-line outlines" in response.data
     assert b'name="include_cut_lines" value="off"' in response.data
+    assert b"Optional: mug/canteen curved adapter effect" in response.data
+    assert b"Adapter math" in response.data
+    assert b"Curve diameter" in response.data
     assert b"Demo Badge" in response.data
 
 
@@ -430,7 +443,11 @@ def test_api_health_options_and_badges(monkeypatch):
     assert options.status_code == 200
     assert options.json["defaults"]["page_size"] == "a4"
     assert options.json["defaults"]["text_font"] == "ubuntu"
+    assert options.json["defaults"]["curve_device"] == "custom"
+    assert options.json["defaults"]["curve_diameter"] == "8.0"
     assert options.json["text_fonts"]["ubuntu"] == "Ubuntu"
+    assert options.json["curve_device_options"]["mug"] == "Standard mug"
+    assert options.json["curve_device_diameters"]["mug"]["cm"] == "8.2"
     assert options.json["logo_size_options"]["cm"]
     assert badges.status_code == 200
     assert [badge["id"] for badge in badges.json["badges"]] == [DEMO_BADGE.id, "makespace-logo"]
@@ -552,6 +569,9 @@ def test_api_layout_preview_computes_json_layout_with_logo(monkeypatch):
                 "front_text": "Ada",
                 "back_text": "MakeSpace",
                 "text_font": "times",
+                "include_curve_effect": True,
+                "curve_device": "mug",
+                "curve_diameter": "3.25",
             },
             "manual_placements": [
                 {"layout_index": 0, "placement_index": 0, "x": 1.0, "y": 2.0, "rotation": 12}
@@ -565,6 +585,9 @@ def test_api_layout_preview_computes_json_layout_with_logo(monkeypatch):
     assert response.json["options"]["front_text"] == "Ada"
     assert response.json["options"]["back_text"] == "MakeSpace"
     assert response.json["options"]["text_font"] == "times"
+    assert response.json["options"]["include_curve_effect"] is True
+    assert response.json["options"]["curve_device"] == "mug"
+    assert response.json["options"]["curve_diameter"] == "3.25"
     assert [badge["id"] for badge in response.json["badges"]] == [DEMO_BADGE.id, "makespace-logo"]
     placements = response.json["layouts"][0]["placements"]
     assert [placement["badge_id"] for placement in placements] == [DEMO_BADGE.id, "makespace-logo"]
@@ -596,6 +619,9 @@ def test_api_pdf_generates_pdf_from_json(monkeypatch):
                 "mirror": False,
                 "include_print_marks": True,
                 "include_cut_lines": True,
+                "include_curve_effect": True,
+                "curve_device": "mug",
+                "curve_diameter": "3.25",
             },
             "manual_placements": [
                 {"layout_index": 0, "placement_index": 0, "x": 1.0, "y": 2.0, "rotation": 12}
@@ -617,7 +643,37 @@ def test_api_pdf_generates_pdf_from_json(monkeypatch):
     assert kwargs["cut_lines"] is True
     assert kwargs["metadata"]["include_print_marks"] == "true"
     assert kwargs["metadata"]["include_cut_lines"] == "true"
+    assert kwargs["metadata"]["include_curve_effect"] == "true"
+    assert kwargs["metadata"]["curve_device"] == "mug"
+    assert kwargs["metadata"]["curve_diameter"] == "3.25"
+    assert kwargs["curve_settings"] == {"device": "mug", "diameter_inches": 3.25}
 
+
+
+def test_api_pdf_verifies_assets_before_rendering(monkeypatch):
+    render_calls = []
+    monkeypatch.setattr("tshirt_templates.badges.list_badges", lambda: [DEMO_BADGE])
+    monkeypatch.setitem(
+        sys.modules,
+        "tshirt_templates.pdf",
+        SimpleNamespace(
+            verify_pdf_assets=lambda badges: [
+                {"badge_id": badges[0].id, "name": badges[0].name, "message": "broken asset"}
+            ],
+            render_pdf=lambda *args, **kwargs: render_calls.append((args, kwargs)) or b"%PDF",
+        ),
+    )
+    app = create_app()
+
+    response = app.test_client().post(
+        "/api/v1/pdfs",
+        json={"badge_ids": [DEMO_BADGE.id], "options": {"sides": ["front"]}},
+    )
+
+    assert response.status_code == 422
+    assert response.json["error"]["code"] == "asset_verification_failed"
+    assert response.json["error"]["failures"][0]["badge_id"] == DEMO_BADGE.id
+    assert render_calls == []
 
 def test_api_pdf_rejects_non_json_payload():
     app = create_app()
@@ -687,6 +743,8 @@ def test_mcp_metadata_resources_prompts_and_tools(monkeypatch):
 
     assert metadata.status_code == 200
     assert metadata.json["endpoint"] == "/mcp"
+    assert metadata.json["transport"] == "streamable-http-json-rpc"
+    assert "required MCP port" in metadata.json["port_note"]
     assert "render_pdf" in metadata.json["tools"]
     assert initialize.status_code == 200
     assert initialize.json["result"]["serverInfo"]["name"] == "tshirt_templates"
@@ -703,11 +761,16 @@ def test_mcp_metadata_resources_prompts_and_tools(monkeypatch):
         "render_pdf",
         "upload_badge_artwork",
         "validate_template",
+        "list_saved_templates",
+        "save_template",
+        "get_saved_template",
+        "delete_saved_template",
     }
     assert resources.status_code == 200
     assert {resource["uri"] for resource in resources.json["result"]["resources"]} >= {
         "tshirt://options",
         "tshirt://badges",
+        "tshirt://templates",
     }
     assert read_options.status_code == 200
     options_resource = read_options.json["result"]["contents"][0]
@@ -717,7 +780,11 @@ def test_mcp_metadata_resources_prompts_and_tools(monkeypatch):
     badges_resource = read_badges.json["result"]["contents"][0]
     assert json.loads(badges_resource["text"])["badges"][0]["id"] == DEMO_BADGE.id
     assert resource_templates.status_code == 200
-    assert resource_templates.json["result"] == {"resourceTemplates": []}
+    templates_payload = resource_templates.json["result"]["resourceTemplates"]
+    assert {template["uriTemplate"] for template in templates_payload} >= {
+        "tshirt://badges{?order,include_logo,refresh}",
+        "tshirt://templates/{name}",
+    }
     assert prompts.status_code == 200
     assert {prompt["name"] for prompt in prompts.json["result"]["prompts"]} >= {
         "design_tshirt_template",
@@ -763,6 +830,39 @@ def test_mcp_rejects_unknown_resources_and_invalid_uploads(tmp_path):
     assert invalid_upload.status_code == 200
     assert invalid_upload.json["error"]["message"] == "content_base64 is not valid base64."
 
+
+
+def test_mcp_render_pdf_reports_asset_verification_failures(monkeypatch):
+    monkeypatch.setattr("tshirt_templates.badges.list_badges", lambda: [DEMO_BADGE])
+    monkeypatch.setitem(
+        sys.modules,
+        "tshirt_templates.pdf",
+        SimpleNamespace(
+            verify_pdf_assets=lambda badges: [
+                {"badge_id": badges[0].id, "name": badges[0].name, "message": "broken asset"}
+            ],
+            render_pdf=lambda *args, **kwargs: b"%PDF",
+        ),
+    )
+    app = create_app()
+
+    response = app.test_client().post(
+        "/mcp",
+        json={
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "tools/call",
+            "params": {
+                "name": "render_pdf",
+                "arguments": {"badge_ids": [DEMO_BADGE.id], "options": {"sides": ["front"]}},
+            },
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.json["error"]["code"] == -32602
+    assert response.json["error"]["data"]["code"] == "asset_verification_failed"
+    assert response.json["error"]["data"]["failures"][0]["badge_id"] == DEMO_BADGE.id
 
 def test_mcp_render_pdf_upload_and_validate_template(monkeypatch, tmp_path):
     calls = []
@@ -854,3 +954,156 @@ def test_api_ready_reports_not_ready_when_upload_folder_is_file(tmp_path):
         "service": "tshirt_templates",
         "checks": {"upload_folder": "error"},
     }
+
+
+def test_api_index_and_mcp_batch_and_resource_template_queries(monkeypatch):
+    monkeypatch.setattr("tshirt_templates.app.list_badges", lambda: [DEMO_BADGE])
+    monkeypatch.setattr("tshirt_templates.badges.list_badges", lambda: [DEMO_BADGE])
+    app = create_app()
+    client = app.test_client()
+
+    api_index = client.get("/api/v1")
+    batch = client.post(
+        "/mcp",
+        json=[
+            {"jsonrpc": "2.0", "id": 1, "method": "ping"},
+            {
+                "jsonrpc": "2.0",
+                "id": 2,
+                "method": "tools/call",
+                "params": {"name": "list_badges", "input": {"include_logo": True}},
+            },
+        ],
+    )
+    templated_resource = client.post(
+        "/mcp",
+        json={
+            "jsonrpc": "2.0",
+            "id": 3,
+            "method": "resources/read",
+            "params": {"uri": "tshirt://badges?include_logo=true"},
+        },
+    )
+    mixed_batch = client.post(
+        "/mcp",
+        json=[
+            {"jsonrpc": "2.0", "id": 4, "method": "ping"},
+            "bad",
+            {"jsonrpc": "2.0", "id": 5, "method": "tools/list", "params": []},
+        ],
+    )
+    invalid = client.post("/mcp", json="bad")
+
+    assert api_index.status_code == 200
+    assert api_index.json["documentation"]["repository_path"] == "docs/APIDOCS.md"
+    assert api_index.json["mcp"]["endpoint"] == "/mcp"
+    assert api_index.json["mcp"]["resource_templates"] == ["tshirt://badges{?order,include_logo,refresh}"]
+    assert "no required MCP port" in api_index.json["mcp"]["port_note"]
+    assert batch.status_code == 200
+    assert batch.json[0]["result"] == {}
+    assert batch.json[1]["result"]["structuredContent"]["badges"][-1]["id"] == "makespace-logo"
+    assert templated_resource.status_code == 200
+    resource_payload = json.loads(templated_resource.json["result"]["contents"][0]["text"])
+    assert resource_payload["badges"][-1]["id"] == "makespace-logo"
+    assert mixed_batch.status_code == 200
+    assert mixed_batch.json[0]["result"] == {}
+    assert mixed_batch.json[1]["error"]["code"] == -32600
+    assert mixed_batch.json[2]["error"]["code"] == -32602
+    assert invalid.status_code == 200
+    assert invalid.json["error"]["code"] == -32600
+
+
+def test_api_saved_templates_round_trip(tmp_path):
+    app = create_app()
+    app.config["TEMPLATE_FOLDER"] = str(tmp_path)
+    client = app.test_client()
+    template = {
+        "badge_ids": [DEMO_BADGE.id],
+        "options": {"sides": ["front"], "mode": "grid", "front_text": "Ada"},
+        "manual_placements": [{"layout_index": 0, "placement_index": 0, "x": 1.5}],
+    }
+
+    saved = client.post("/api/v1/templates", json={"name": "team-shirt", "template": template})
+    listed = client.get("/api/v1/templates")
+    fetched = client.get("/api/v1/templates/team-shirt")
+    rejected_name = client.post("/api/v1/templates", json={"name": "../bad", "template": template})
+    template_path = tmp_path / "team-shirt.json"
+
+    assert saved.status_code == 201
+    assert saved.json["name"] == "team-shirt"
+    assert saved.json["template"] == template
+    assert template_path.exists()
+    assert listed.status_code == 200
+    assert listed.json["templates"][0]["name"] == "team-shirt"
+    assert listed.json["templates"][0]["badge_count"] == 1
+    assert fetched.status_code == 200
+    assert fetched.json["template"]["options"]["front_text"] == "Ada"
+    assert rejected_name.status_code == 400
+    assert rejected_name.json["error"]["code"] == "invalid_template_name"
+
+    deleted = client.delete("/api/v1/templates/team-shirt")
+    missing = client.get("/api/v1/templates/team-shirt")
+
+    assert deleted.status_code == 200
+    assert deleted.json == {"deleted": "team-shirt"}
+    assert missing.status_code == 404
+
+
+def test_mcp_saved_template_tools_and_resources(tmp_path):
+    app = create_app()
+    app.config["TEMPLATE_FOLDER"] = str(tmp_path)
+    client = app.test_client()
+    template = {
+        "badge_ids": [DEMO_BADGE.id],
+        "options": {"sides": ["front"], "mode": "grid"},
+        "manual_placements": [],
+    }
+
+    save = client.post(
+        "/mcp",
+        json={
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "tools/call",
+            "params": {"name": "save_template", "arguments": {"name": "mcp-shirt", "template": template}},
+        },
+    )
+    list_tool = client.post(
+        "/mcp",
+        json={"jsonrpc": "2.0", "id": 2, "method": "tools/call", "params": {"name": "list_saved_templates"}},
+    )
+    resource_list = client.post(
+        "/mcp",
+        json={"jsonrpc": "2.0", "id": 3, "method": "resources/read", "params": {"uri": "tshirt://templates"}},
+    )
+    resource_item = client.post(
+        "/mcp",
+        json={
+            "jsonrpc": "2.0",
+            "id": 4,
+            "method": "resources/read",
+            "params": {"uri": "tshirt://templates/mcp-shirt"},
+        },
+    )
+    delete = client.post(
+        "/mcp",
+        json={
+            "jsonrpc": "2.0",
+            "id": 5,
+            "method": "tools/call",
+            "params": {"name": "delete_saved_template", "arguments": {"name": "mcp-shirt"}},
+        },
+    )
+
+    assert save.status_code == 200
+    assert save.json["result"]["structuredContent"]["name"] == "mcp-shirt"
+    assert list_tool.status_code == 200
+    assert list_tool.json["result"]["structuredContent"]["templates"][0]["name"] == "mcp-shirt"
+    assert resource_list.status_code == 200
+    list_payload = json.loads(resource_list.json["result"]["contents"][0]["text"])
+    assert list_payload["templates"][0]["name"] == "mcp-shirt"
+    assert resource_item.status_code == 200
+    item_payload = json.loads(resource_item.json["result"]["contents"][0]["text"])
+    assert item_payload["template"] == template
+    assert delete.status_code == 200
+    assert delete.json["result"]["structuredContent"] == {"deleted": "mcp-shirt"}

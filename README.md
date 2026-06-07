@@ -18,14 +18,14 @@ The app discovers badge image assets from the GitHub repository, lets you select
   - **Wave ribbon**: badges following a horizontal sine-wave band.
   - **Border**: perimeter frame layout for collar/sleeve-style badge accents.
   - **M pixel shape**: pixel-art capital M that repeats the selected badges as mosaic pixels.
-- Configurable page size (A4 by default), page orientation, centimeter/inch units, badge size presets, spacing presets, copies per badge, mirroring, and panel selection, with invalid form values safely normalized.
+- Configurable page size (A4 by default), page orientation, centimeter/inch units, badge size presets, spacing presets, copies per badge, mirroring, and panel selection, with invalid form values safely normalized and grouped into step-by-step controls plus a quick print guide.
 - Optional front/back panel text for names or short labels, with Ubuntu as the default font plus Helvetica, Times, Courier, and DejaVu Sans choices.
 - User uploads for additional SVG/PNG/JPG badge artwork stored under the Flask `instance/uploads/` folder, with browser and API replacement/deletion for saved uploads and validation notices for questionable image dimensions or invalid artwork.
-- Optional mirroring for sublimation transfer workflows plus badge cut-line outlines, crop/registration print marks, and a calibration page with rulers/mirror warnings for alignment.
+- Optional mirroring for sublimation transfer workflows plus badge cut-line outlines, crop/registration print marks, a mug/canteen curved-adapter effect with device presets and configurable diameter, and a calibration page with rulers/mirror warnings for alignment.
 - Optional MakeSpace Madrid logo element with configurable size.
-- Badge picker cards are selected by default, searchable/filterable by category, bulk selectable, and drag-and-droppable before previewing to customize selection-order layouts.
+- Badge picker cards are selected by default, searchable/filterable by category, bulk selectable with live selected/visible counts, and drag-and-droppable before previewing to customize selection-order layouts.
 - MakeSpace-inspired black/yellow monospace UI theme plus browser preview with manual drag/coordinate placement adjustments, reset controls, zoom, snap-to-grid, snap-to-panel-edge controls, keyboard nudging, rotation presets, overlap warnings, and PDF download.
-- JSON API endpoints for health/options/badges, API uploads, layout previews, and direct PDF generation, plus MCP-compatible tools/resources/prompts and a CLI for agent-driven or repeatable local PDF workflows.
+- JSON API endpoints for health/options/badges, API uploads, layout previews, saved template files, and direct PDF generation, plus MCP-compatible tools/resources/prompts and a CLI for agent-driven or repeatable local PDF workflows.
 
 ## Quick start
 
@@ -36,7 +36,7 @@ pip install -r requirements.txt
 python -m tshirt_templates.cli serve --debug
 ```
 
-Open <http://127.0.0.1:5000>. The same server also exposes the JSON API under `/api/v1` and the MCP JSON-RPC endpoint at `/mcp`, so the browser UI, API clients, and MCP clients all run from one app process.
+Open <http://127.0.0.1:5000>. The same server also exposes API discovery at `/api/v1`, the JSON API under `/api/v1`, and the MCP JSON-RPC endpoint at `/mcp`, so the browser UI, API clients, and MCP clients all run from one app process. MCP clients do not need a reserved port; configure them with the reachable `http://HOST:PORT/mcp` URL and use `--port` only when you want a stable local/container port.
 
 If you prefer Flask's built-in CLI, this equivalent command serves the same UI, API, and MCP routes:
 

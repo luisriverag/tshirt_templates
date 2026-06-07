@@ -30,6 +30,27 @@
       </div>
 
 
+      <section class="panel onboarding-guide" aria-labelledby="onboarding-title">
+        <div class="section-heading">
+          <h2 id="onboarding-title">Quick print guide</h2>
+          <span>Before you preview</span>
+        </div>
+        <div class="guide-cards">
+          <article>
+            <strong>Mirror transfers</strong>
+            <p>Keep mirroring enabled for sublimation transfer paper unless you are making a proof or calibration print.</p>
+          </article>
+          <article>
+            <strong>Leave cut spacing</strong>
+            <p>Use spacing and optional cut lines so badges remain easy to trim without clipping artwork.</p>
+          </article>
+          <article>
+            <strong>Measure curves</strong>
+            <p>For mugs or canteens, measure the outside diameter of the blank or heater insert and test the wrap with scrap paper.</p>
+          </article>
+        </div>
+      </section>
+
       {% if upload_messages %}
         <section class="panel alert-list" role="status" aria-live="polite">
           <h2>Upload notices</h2>
@@ -43,109 +64,153 @@
 
       <form class="generator" method="post" action="/preview" enctype="multipart/form-data">
         <section class="panel controls">
-          <h2>Template options</h2>
-          <div class="control-grid">
-            <label>Page size
-              <select name="page_size">
-                {% for value, label in page_sizes.items() %}
-                  <option value="{{ value }}" {% if value == "a4" %}selected{% endif %}>{{ label }}</option>
-                {% endfor %}
-              </select>
-            </label>
-            <label>Orientation
-              <select name="orientation">
-                {% for value, label in orientations.items() %}
-                  <option value="{{ value }}">{{ label }}</option>
-                {% endfor %}
-              </select>
-            </label>
-            <label>Placement
-              <select name="mode">
-                {% for value, label in modes.items() %}
-                  <option value="{{ value }}">{{ label }}</option>
-                {% endfor %}
-              </select>
-            </label>
-            <label>Badge order
-              <select name="order">
-                {% for value, label in order_modes.items() %}
-                  <option value="{{ value }}">{{ label }}</option>
-                {% endfor %}
-              </select>
-            </label>
-            <label>Units
-              <select name="unit" id="unit-select">
-                {% for value, label in units.items() %}
-                  <option value="{{ value }}" {% if value == default_unit %}selected{% endif %}>{{ label }}</option>
-                {% endfor %}
-              </select>
-            </label>
-            <label>Badge size
-              <select name="badge_size" id="badge-size-select">
-                {% for amount in badge_size_options[default_unit] %}
-                  <option value="{{ amount }}" {% if amount == "3.5" %}selected{% endif %}>{{ amount }} {{ default_unit }}</option>
-                {% endfor %}
-              </select>
-              <small>Only common print-cut sizes are offered so generated badges stay legible and fit the shirt panels.</small>
-            </label>
-            <label>Spacing
-              <select name="spacing" id="spacing-select">
-                {% for amount in spacing_options[default_unit] %}
-                  <option value="{{ amount }}" {% if amount == "0.5" %}selected{% endif %}>{{ amount }} {{ default_unit }}</option>
-                {% endfor %}
-              </select>
-              <small>Spacing uses practical print gaps that keep badges separable without wasting transfer paper.</small>
-            </label>
-            <label>Copies per badge
-              <select name="copies">
-                {% for amount in copy_options %}
-                  <option value="{{ amount }}">{{ amount }}</option>
-                {% endfor %}
-              </select>
-              <small>Copy counts are limited to 1–24 to avoid oversized PDFs and layouts too dense to cut cleanly.</small>
-            </label>
-            <label>Front text
-              <input type="text" name="front_text" maxlength="64" placeholder="e.g. Ada" aria-describedby="front-text-help">
-              <small id="front-text-help">Optional name or short label printed on the front panel.</small>
-            </label>
-            <label>Back text
-              <input type="text" name="back_text" maxlength="64" placeholder="e.g. MakeSpace Madrid" aria-describedby="back-text-help">
-              <small id="back-text-help">Optional name or short label printed on the back panel.</small>
-            </label>
-            <label>Text font
-              <select name="text_font">
-                {% for value, label in text_fonts.items() %}
-                  <option value="{{ value }}" {% if value == "ubuntu" %}selected{% endif %}>{{ label }}</option>
-                {% endfor %}
-              </select>
-              <small>Ubuntu is the default, with other print-friendly font choices available.</small>
-            </label>
-            <label>Logo size
-              <select name="logo_size" id="logo-size-select">
-                {% for amount in logo_size_options[default_unit] %}
-                  <option value="{{ amount }}" {% if amount == "5.0" %}selected{% endif %}>{{ amount }} {{ default_unit }}</option>
-                {% endfor %}
-              </select>
-              <small>Used only when the MakeSpace logo option is enabled.</small>
+          <div class="section-heading">
+            <h2>Template options</h2>
+            <span>Set up once, adjust in preview</span>
+          </div>
+          <p class="hint">Start with page/layout basics, then only open the mug/canteen curve controls if you are printing for a curved heater adapter.</p>
+
+          <div class="option-groups">
+            <fieldset class="control-group">
+              <legend>1. Page and layout</legend>
+              <div class="control-grid">
+                <label>Page size
+                  <select name="page_size">
+                    {% for value, label in page_sizes.items() %}
+                      <option value="{{ value }}" {% if value == "a4" %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                  </select>
+                </label>
+                <label>Orientation
+                  <select name="orientation">
+                    {% for value, label in orientations.items() %}
+                      <option value="{{ value }}">{{ label }}</option>
+                    {% endfor %}
+                  </select>
+                </label>
+                <label>Placement
+                  <select name="mode">
+                    {% for value, label in modes.items() %}
+                      <option value="{{ value }}">{{ label }}</option>
+                    {% endfor %}
+                  </select>
+                </label>
+                <label>Badge order
+                  <select name="order">
+                    {% for value, label in order_modes.items() %}
+                      <option value="{{ value }}">{{ label }}</option>
+                    {% endfor %}
+                  </select>
+                </label>
+                <label>Units
+                  <select name="unit" id="unit-select">
+                    {% for value, label in units.items() %}
+                      <option value="{{ value }}" {% if value == default_unit %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                  </select>
+                </label>
+                <label>Copies per badge
+                  <select name="copies">
+                    {% for amount in copy_options %}
+                      <option value="{{ amount }}">{{ amount }}</option>
+                    {% endfor %}
+                  </select>
+                  <small>Copy counts are limited to 1–24 to keep files practical.</small>
+                </label>
+              </div>
+            </fieldset>
+
+            <fieldset class="control-group">
+              <legend>2. Badge size and labels</legend>
+              <div class="control-grid">
+                <label>Badge size
+                  <select name="badge_size" id="badge-size-select">
+                    {% for amount in badge_size_options[default_unit] %}
+                      <option value="{{ amount }}" {% if amount == "3.5" %}selected{% endif %}>{{ amount }} {{ default_unit }}</option>
+                    {% endfor %}
+                  </select>
+                  <small>Only common print-cut sizes are offered so generated badges stay legible.</small>
+                </label>
+                <label>Spacing
+                  <select name="spacing" id="spacing-select">
+                    {% for amount in spacing_options[default_unit] %}
+                      <option value="{{ amount }}" {% if amount == "0.5" %}selected{% endif %}>{{ amount }} {{ default_unit }}</option>
+                    {% endfor %}
+                  </select>
+                  <small>Practical gaps keep badges separable without wasting paper.</small>
+                </label>
+                <label>Front text
+                  <input type="text" name="front_text" maxlength="64" placeholder="e.g. Ada" aria-describedby="front-text-help">
+                  <small id="front-text-help">Optional name or short label printed on the front panel.</small>
+                </label>
+                <label>Back text
+                  <input type="text" name="back_text" maxlength="64" placeholder="e.g. MakeSpace Madrid" aria-describedby="back-text-help">
+                  <small id="back-text-help">Optional name or short label printed on the back panel.</small>
+                </label>
+                <label>Text font
+                  <select name="text_font">
+                    {% for value, label in text_fonts.items() %}
+                      <option value="{{ value }}" {% if value == "ubuntu" %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                  </select>
+                </label>
+                <label>Logo size
+                  <select name="logo_size" id="logo-size-select">
+                    {% for amount in logo_size_options[default_unit] %}
+                      <option value="{{ amount }}" {% if amount == "5.0" %}selected{% endif %}>{{ amount }} {{ default_unit }}</option>
+                    {% endfor %}
+                  </select>
+                  <small>Used only when the MakeSpace logo option is enabled.</small>
+                </label>
+              </div>
+            </fieldset>
+
+            <fieldset class="control-group">
+              <legend>3. PDF output</legend>
+              <div class="toggle-grid">
+                <label class="inline"><input type="checkbox" name="sides" value="front" checked> Front panel</label>
+                <label class="inline"><input type="checkbox" name="sides" value="back" checked> Back panel</label>
+                <label class="inline"><input type="checkbox" name="include_logo" value="on"> Include MakeSpace logo</label>
+                <input type="hidden" name="include_logo" value="off">
+                <label class="inline"><input type="checkbox" name="mirror" value="on" checked> Mirror for sublimation transfer</label>
+                <input type="hidden" name="mirror" value="off">
+                <label class="inline"><input type="checkbox" name="include_print_marks" value="on"> Add crop and registration marks</label>
+                <input type="hidden" name="include_print_marks" value="off">
+                <label class="inline"><input type="checkbox" name="include_cut_lines" value="on"> Add badge cut-line outlines</label>
+                <input type="hidden" name="include_cut_lines" value="off">
+              </div>
+            </fieldset>
+
+            <details class="advanced-panel curve-panel">
+              <summary>Optional: mug/canteen curved adapter effect</summary>
+              <p class="hint">Use this only for cylindrical blanks in a curved heater adapter. Pick a preset, then enter the measured outside diameter for the exact mug, canteen, or insert.</p>
+              <div class="control-grid">
+                <label>Curve device
+                  <select name="curve_device" id="curve-device-select">
+                    {% for value, label in curve_device_options.items() %}
+                      <option value="{{ value }}" {% if value == "custom" %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                  </select>
+                </label>
+                <label>Curve diameter
+                  <input type="number" name="curve_diameter" id="curve-diameter-input" min="1" max="50" step="0.1" value="8.0">
+                  <small>Measured in <span id="curve-diameter-unit">{{ default_unit }}</span>.</small>
+                </label>
+                <div class="curve-helper" aria-live="polite">
+                  <strong>Adapter math</strong>
+                  <span id="curve-circumference">Circumference: about 25.1 cm</span>
+                  <small>This is a guide for checking wrap width; still test with scrap paper before pressing.</small>
+                </div>
+              </div>
+              <label class="inline"><input type="checkbox" name="include_curve_effect" id="include-curve-effect" value="on"> Apply curved effect in the PDF</label>
+              <input type="hidden" name="include_curve_effect" value="off">
+            </details>
+
+            <label class="upload-dropzone">Upload badge artwork
+              <input type="file" name="uploads" multiple accept=".svg,.png,.jpg,.jpeg,image/svg+xml,image/png,image/jpeg">
+              <small>Optional SVG, PNG, or JPG files are saved locally and included in this template.</small>
             </label>
           </div>
-          <fieldset>
-            <legend>Panels</legend>
-            <label class="inline"><input type="checkbox" name="sides" value="front" checked> Front</label>
-            <label class="inline"><input type="checkbox" name="sides" value="back" checked> Back</label>
-          </fieldset>
-          <label class="inline"><input type="checkbox" name="include_logo" value="on"> Include MakeSpace logo</label>
-          <input type="hidden" name="include_logo" value="off">
-          <label class="inline"><input type="checkbox" name="mirror" value="on" checked> Mirror PDF for sublimation transfer</label>
-          <input type="hidden" name="mirror" value="off">
-          <label class="inline"><input type="checkbox" name="include_print_marks" value="on"> Add crop and registration marks</label>
-          <input type="hidden" name="include_print_marks" value="off">
-          <label class="inline"><input type="checkbox" name="include_cut_lines" value="on"> Add badge cut-line outlines</label>
-          <input type="hidden" name="include_cut_lines" value="off">
-          <label>Upload badge artwork
-            <input type="file" name="uploads" multiple accept=".svg,.png,.jpg,.jpeg,image/svg+xml,image/png,image/jpeg">
-            <small>Uploaded SVG, PNG, or JPG files are saved locally and included in this template.</small>
-          </label>
         </section>
 
         <section class="panel">
@@ -154,6 +219,10 @@
             <span>{{ badges|length }} image assets</span>
           </div>
           <p class="hint" id="badge-picker-help">All badges are selected by default. Search, filter by category, bulk-select the visible cards, or drag cards to set the initial selection order.</p>
+          <div class="selection-summary" aria-live="polite">
+            <strong><span id="selected-badge-count">{{ selected_ids|length }}</span> selected</strong>
+            <span><span id="visible-badge-count">{{ badges|length }}</span> visible after filters</span>
+          </div>
           <a class="skip-badge-list" href="#template-actions">Skip badge list and continue to actions</a>
           <div class="badge-toolbar" aria-label="Badge search and bulk selection">
             <label>Search badges
@@ -206,6 +275,13 @@
       const badgeSizeSelect = document.querySelector('#badge-size-select');
       const spacingSelect = document.querySelector('#spacing-select');
       const logoSizeSelect = document.querySelector('#logo-size-select');
+      const curveDeviceSelect = document.querySelector('#curve-device-select');
+      const curveDiameterInput = document.querySelector('#curve-diameter-input');
+      const curveDiameterUnit = document.querySelector('#curve-diameter-unit');
+      const curveCircumference = document.querySelector('#curve-circumference');
+      const includeCurveEffect = document.querySelector('#include-curve-effect');
+      const selectedBadgeCount = document.querySelector('#selected-badge-count');
+      const visibleBadgeCount = document.querySelector('#visible-badge-count');
       const badgeSizeOptions = {{ badge_size_options|tojson }};
       const spacingOptions = {{ spacing_options|tojson }};
       const logoSizeOptions = {{ logo_size_options|tojson }};
@@ -213,6 +289,8 @@
         badgeSize: {{ default_badge_amounts|tojson }},
         spacing: {{ default_spacing_amounts|tojson }},
         logoSize: {{ default_logo_amounts|tojson }},
+        curveDiameter: {{ default_curve_diameter_amounts|tojson }},
+        curveDeviceDiameters: {{ curve_device_diameters|tojson }},
       };
 
       function fillAmountSelect(select, values, selectedValue) {
@@ -226,13 +304,31 @@
         });
       }
 
+      function updateCurveHelper() {
+        const unit = unitSelect.value;
+        const diameter = Math.max(0, Number(curveDiameterInput.value) || Number(defaultValues.curveDiameter[unit]));
+        curveDiameterUnit.textContent = unit;
+        curveCircumference.textContent = `Circumference: about ${(diameter * Math.PI).toFixed(1)} ${unit}`;
+      }
+
       function updateAmountSelectors() {
         const unit = unitSelect.value;
         fillAmountSelect(badgeSizeSelect, badgeSizeOptions[unit], defaultValues.badgeSize[unit]);
         fillAmountSelect(spacingSelect, spacingOptions[unit], defaultValues.spacing[unit]);
         fillAmountSelect(logoSizeSelect, logoSizeOptions[unit], defaultValues.logoSize[unit]);
+        const selectedCurveDevice = curveDeviceSelect.value || 'custom';
+        curveDiameterInput.value = defaultValues.curveDeviceDiameters[selectedCurveDevice][unit] || defaultValues.curveDiameter[unit];
+        updateCurveHelper();
       }
 
+      function updateBadgeCounts() {
+        const cards = [...badgeGrid.querySelectorAll('.badge-card')];
+        selectedBadgeCount.textContent = cards.filter((card) => card.querySelector('input[type="checkbox"]').checked).length;
+        visibleBadgeCount.textContent = cards.filter((card) => !card.hidden).length;
+      }
+
+      curveDeviceSelect.addEventListener('change', updateAmountSelectors);
+      curveDiameterInput.addEventListener('input', updateCurveHelper);
       unitSelect.addEventListener('change', updateAmountSelectors);
       updateAmountSelectors();
 
@@ -248,16 +344,23 @@
           const matchesCategory = category === 'all' || card.dataset.category === category;
           card.hidden = !(matchesQuery && matchesCategory);
         });
+        updateBadgeCounts();
       }
 
+      badgeGrid.addEventListener('change', (event) => {
+        if (event.target.matches('input[type="checkbox"]')) updateBadgeCounts();
+      });
       badgeSearch.addEventListener('input', filterBadges);
       badgeCategoryFilter.addEventListener('change', filterBadges);
       document.querySelector('#select-visible-badges').addEventListener('click', () => {
         visibleBadgeCards().forEach((card) => { card.querySelector('input[type="checkbox"]').checked = true; });
+        updateBadgeCounts();
       });
       document.querySelector('#clear-visible-badges').addEventListener('click', () => {
         visibleBadgeCards().forEach((card) => { card.querySelector('input[type="checkbox"]').checked = false; });
+        updateBadgeCounts();
       });
+      updateBadgeCounts();
 
       let draggedCard = null;
 

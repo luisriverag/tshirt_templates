@@ -8,7 +8,7 @@ Run the browser app, JSON API, and MCP endpoint together with the CLI helper:
 python -m tshirt_templates.cli serve --debug
 ```
 
-That command starts one Flask development server. The browser UI is available at `/`, the JSON API is available under `/api/v1`, and the MCP JSON-RPC endpoint is available at `/mcp`. Host and port can be customized with `--host` and `--port`; for example, `python -m tshirt_templates.cli serve --host 0.0.0.0 --port 8080`.
+That command starts one Flask development server. The browser UI is available at `/`, the JSON API is available under `/api/v1`, and the MCP JSON-RPC endpoint is available at `/mcp`. Host and port can be customized with `--host` and `--port`; for example, `python -m tshirt_templates.cli serve --host 0.0.0.0 --port 8080`. MCP does not require a specific reserved port; compatibility comes from giving each MCP client a reachable `http://HOST:PORT/mcp` URL. Choose a predictable port only to simplify client configuration, container publishing, firewall rules, or avoiding conflicts with another local service.
 
 The equivalent Flask command is still supported:
 
@@ -30,6 +30,7 @@ The app now has the original browser form routes plus an initial JSON API and MC
 | `POST` | `/preview` | HTML | Renders SVG preview from submitted form data. |
 | `POST` | `/pdf` | PDF | Returns generated PDF bytes. |
 | `GET` | `/calibration.pdf` | PDF | Returns a calibration page with rulers and mirror guidance. |
+| `GET` | `/api/v1` | JSON | API discovery metadata, endpoint map, repository documentation path, and MCP connection hints. |
 | `GET` | `/api/v1/health` | JSON | Basic service health. |
 | `GET` | `/api/v1/ready` | JSON | Readiness check for container or process supervisors. |
 | `GET` | `/api/v1/options` | JSON | Supported option values and defaults. |
@@ -39,6 +40,10 @@ The app now has the original browser form routes plus an initial JSON API and MC
 | `DELETE` | `/api/v1/uploads/<filename>` | JSON | Deletes a saved uploaded badge artwork file by storage filename. |
 | `POST` | `/api/v1/layouts/preview` | JSON | Computes layouts from badge IDs and options. |
 | `POST` | `/api/v1/pdfs` | PDF | Generates PDF bytes from badge IDs, options, and optional manual placements. |
+| `GET` | `/api/v1/templates` | JSON | Lists saved local JSON template files. |
+| `POST` | `/api/v1/templates` | JSON | Saves or replaces a named local JSON template file. |
+| `GET` | `/api/v1/templates/<name>` | JSON | Reads a saved local JSON template file. |
+| `DELETE` | `/api/v1/templates/<name>` | JSON | Deletes a saved local JSON template file. |
 | `GET` | `/mcp` | JSON | MCP server metadata. |
 | `POST` | `/mcp` | JSON-RPC | Initial MCP methods for initialize, tools/resources listing, and tool calls. |
 
@@ -95,6 +100,9 @@ Design goals:
   "mirror": true,
   "include_print_marks": false,
   "include_cut_lines": false,
+  "include_curve_effect": false,
+  "curve_device": "custom",
+  "curve_diameter": "8.0",
   "front_text": "Ada",
   "back_text": "MakeSpace Madrid",
   "text_font": "ubuntu"
@@ -173,6 +181,7 @@ Response should include:
 - Layout modes.
 - Units.
 - Text fonts.
+- Curve device presets and preset diameters.
 - Badge size presets.
 - Spacing presets.
 - Copy range.
@@ -297,7 +306,7 @@ Request:
 }
 ```
 
-`front_text` and `back_text` are optional short labels rendered on the matching panel. `text_font` accepts the values returned by `/api/v1/options` and defaults to `ubuntu`.
+`front_text` and `back_text` are optional short labels rendered on the matching panel. `text_font` accepts the values returned by `/api/v1/options` and defaults to `ubuntu`. `include_curve_effect` adds a cylindrical mug/canteen adapter effect in generated PDFs. `curve_device` may be `custom`, `mug`, `skinny-tumbler`, or `canteen`; `/api/v1/options` returns both `curve_device_options` labels and `curve_device_diameters` preset values. Presets provide a starting diameter, and `curve_diameter` may override it with the exact outside device/heater-adapter diameter in the selected `unit`.
 
 Manual placements are optional. Items are addressed by `layout_index` and `placement_index`, with `x`/`y` supplied in the selected unit from the preview top-left coordinate space.
 
@@ -317,7 +326,7 @@ Response:
 
 ### `POST /api/v1/pdfs`
 
-Generates a PDF from the same JSON layout request shape used by `/api/v1/layouts/preview`. The endpoint applies badge ordering, copies, optional logo placement, optional panel text, manual placement overrides, and mirror settings, then returns `application/pdf` bytes directly.
+Generates a PDF from the same JSON layout request shape used by `/api/v1/layouts/preview`. The endpoint applies badge ordering, copies, optional logo placement, optional panel text, manual placement overrides, mirror settings, and optional cylindrical curve compensation for mug/canteen heater adapters. Before rendering, the server verifies that every resolved badge asset can be fetched and parsed by the PDF renderer; failures return `422 asset_verification_failed` with per-badge details. Successful responses return `application/pdf` bytes directly.
 
 Request:
 
@@ -356,18 +365,65 @@ Content-Disposition: attachment; filename=tshirt-badge-template.pdf
 
 Job-based generation remains a future option if templates become multi-page or asset-heavy.
 
+### `GET /api/v1/templates`
+
+Lists saved local JSON template files from the configured template folder. Each summary includes the template `name`, timestamps, `badge_count`, and normalized `options` snapshot.
+
+Response:
+
+```json
+{
+  "templates": [
+    {
+      "name": "team-shirt",
+      "created_at": "2026-06-07T00:00:00Z",
+      "updated_at": "2026-06-07T00:00:00Z",
+      "badge_count": 3,
+      "options": {"sides": ["front"], "mode": "grid"}
+    }
+  ]
+}
+```
+
 ### `POST /api/v1/templates`
 
-Future endpoint for persisting named templates.
+Saves or replaces a named local JSON template file for repeatable local workflows. Template names are storage-safe names with letters, numbers, dots, dashes, or underscores. The saved `template` uses the same request shape as `/api/v1/layouts/preview` and `/api/v1/pdfs`: `badge_ids`, `options`, and optional `manual_placements`.
 
-Potential fields:
+Request:
 
-- `name`
-- `badge_ids`
-- `options`
-- `manual_placements`
-- `created_at`
-- `updated_at`
+```json
+{
+  "name": "team-shirt",
+  "template": {
+    "badge_ids": ["electronics/example.svg"],
+    "options": {"sides": ["front"], "mode": "grid"},
+    "manual_placements": []
+  }
+}
+```
+
+Response (`201 Created`):
+
+```json
+{
+  "name": "team-shirt",
+  "created_at": "2026-06-07T00:00:00Z",
+  "updated_at": "2026-06-07T00:00:00Z",
+  "template": {
+    "badge_ids": ["electronics/example.svg"],
+    "options": {"sides": ["front"], "mode": "grid"},
+    "manual_placements": []
+  }
+}
+```
+
+### `GET /api/v1/templates/{name}`
+
+Reads one saved template by name. A `.json` suffix is optional in the URL. Unknown or invalid names return a structured `template_not_found` error.
+
+### `DELETE /api/v1/templates/{name}`
+
+Deletes one saved template by name and returns `{"deleted": "name"}`.
 
 ## CLI Automation
 
@@ -406,7 +462,7 @@ Suggested status codes:
 - `404` for unknown badge/template IDs.
 - `413` for upload payload too large.
 - `415` for unsupported media type.
-- `422` for valid JSON that cannot produce a layout.
+- `422` for valid JSON that cannot produce a layout or references assets that cannot be rendered.
 - `500` for unexpected rendering failures.
 
 ## Pending API Implementation Tasks
@@ -424,18 +480,20 @@ MCP support is implemented at `/mcp` using JSON-RPC-style messages. JSON-RPC err
 
 The MCP endpoint lets IDEs, agents, and design tools inspect and generate t-shirt template layouts without manually driving the browser.
 
-The server exposes badge catalog and layout option resources, template preview tools, PDF generation tools, uploaded asset management tools, validation helpers, and layout-related prompt suggestions.
+The server exposes badge catalog and layout option resources, saved template resources, template preview tools, PDF generation tools, uploaded asset management tools, validation helpers, saved-template tools, and layout-related prompt suggestions.
 
 ### MCP Resources
 
-`resources/list` currently returns the two implemented JSON resources. `resources/read` returns one `contents` entry with `mimeType: application/json` and serialized `text`. `resources/templates/list` is supported and currently returns an empty `resourceTemplates` array for clients that call it during capability discovery.
+`resources/list` currently returns implemented JSON resources for options, badges, and saved templates. `resources/read` returns one `contents` entry with `mimeType: application/json` and serialized `text`. `resources/templates/list` returns badge-catalog and saved-template URI templates so clients can discover supported resource shapes.
 
 | Resource URI | Status | Description |
 | --- | --- | --- |
 | `tshirt://options` | Implemented | Current supported options and defaults, matching `/api/v1/options`. |
 | `tshirt://badges` | Implemented | Alphabetically ordered available badge catalog. |
+| `tshirt://badges{?order,include_logo,refresh}` | Implemented | Resource template for client-selected ordering, optional logo inclusion, and cache refresh. |
+| `tshirt://templates` | Implemented | Saved local JSON template summaries. |
+| `tshirt://templates/{name}` | Implemented | One saved local JSON template by name. |
 | `tshirt://layouts/{id}` | Future | Persisted or temporary computed layout. |
-| `tshirt://templates/{id}` | Future | Saved template configuration. |
 | `tshirt://uploads` | Future | Uploaded artwork metadata. |
 
 Example resource read:
@@ -523,9 +581,13 @@ Outputs the created badge record or an MCP invalid-params error when the filenam
 
 Inputs a template request and returns the normalized layout payload plus warnings such as unknown badge IDs or empty layouts. This tool is useful before calling `render_pdf` when an agent needs to explain or repair a request.
 
+#### Saved template tools
+
+The MCP endpoint also exposes `list_saved_templates`, `save_template`, `get_saved_template`, and `delete_saved_template`. These tools mirror `/api/v1/templates` so IDEs and agents can persist repeatable local JSON workflows without manually writing files. Saved templates use the same `badge_ids`, `options`, and `manual_placements` shape as the layout preview and PDF APIs.
+
 ### MCP Error Behavior
 
-Unknown resources, unknown tools, invalid prompts, invalid methods, and invalid base64 uploads return JSON-RPC error objects. Invalid upload arguments use code `-32602` to match JSON-RPC invalid params. The Flask endpoint returns these JSON-RPC errors with HTTP 200 for broad client compatibility.
+Unknown resources, unknown tools, invalid prompts, invalid methods, invalid base64 uploads, and failed PDF asset verification return JSON-RPC error objects. Invalid upload arguments, non-object `params`, and render-preflight failures use code `-32602` to match JSON-RPC invalid params; asset failures include an `error.data.failures` array with per-badge details. Invalid non-object requests use `-32600`. The Flask endpoint returns these JSON-RPC errors with HTTP 200 for broad client compatibility. JSON-RPC batch arrays are accepted and return one response object per request, including per-item errors for invalid batch entries. Tool calls accept MCP-standard `arguments` and a compatibility `input` alias for older or generic JSON-RPC clients.
 
 ### MCP Security Considerations
 
@@ -537,11 +599,12 @@ Unknown resources, unknown tools, invalid prompts, invalid methods, and invalid 
 
 ### Compatibility Methods
 
-The endpoint supports `initialize`, `ping`, `notifications/initialized`, `tools/list`, `tools/call`, `resources/list`, `resources/read`, `resources/templates/list`, `prompts/list`, and `prompts/get`. Initialize advertises `tools`, `resources`, and `prompts` capabilities with list-change notifications disabled.
+The endpoint supports `initialize`, `ping`, `notifications/initialized`, `tools/list`, `tools/call`, `resources/list`, `resources/read`, `resources/templates/list`, `prompts/list`, and `prompts/get`. Initialize advertises `tools`, `resources`, and `prompts` capabilities with list-change notifications disabled and echoes the requested protocol version when a client provides one.
 
 ### MCP Open Questions
 
 - Should MCP continue calling internal Python functions directly, or should future tools go through `/api/v1` for stricter schema/error parity?
+- Should a deployment publish a conventional example port for docs, even though MCP clients only require a reachable endpoint URL?
 - Should generated PDFs continue to be returned as base64 JSON, or should future MCP clients receive resource references or files?
 - Should upstream badge refresh be available to MCP clients by default?
 - What retention policy should apply to generated PDFs and temporary layouts?
