@@ -5,7 +5,6 @@ This backlog only tracks work that is not already available in the current app. 
 ## User Experience
 
 - Add multi-select movement so several badges can be dragged together.
-- Add a simple onboarding guide explaining sublimation mirroring and cut spacing.
 
 ## Layout and Geometry
 
@@ -26,11 +25,9 @@ This backlog only tracks work that is not already available in the current app. 
 - Add configurable DPI/rasterization behavior for raster assets.
 - Add a non-mirrored proof PDF alongside the mirrored transfer PDF.
 - Add export to SVG/PNG for users who want to edit layouts in design tools.
-- Add server-side verification that every asset can be rendered before generating the PDF.
 
 ## API and Automation
 
-- Add saved template files for repeatable local workflows.
 - Add webhook or scheduled refresh for upstream badge catalog changes.
 
 ## Reliability and Operations
@@ -45,6 +42,5 @@ This backlog only tracks work that is not already available in the current app. 
 
 - Add browser-based tests for drag-and-drop manual placement.
 - Add visual snapshot tests for preview layouts.
-- Add PDF smoke tests that inspect page dimensions and placement counts.
 - Add property-based tests for placement bounds across option combinations.
 

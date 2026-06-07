@@ -15,6 +15,7 @@ VALID_LAYOUT_MODES = frozenset(
 VALID_ORDER_MODES = frozenset({"selected", "alphabetical", "category"})
 VALID_UNITS = frozenset({"cm", "in"})
 VALID_TEXT_FONTS = frozenset({"ubuntu", "helvetica", "times", "courier", "dejavu"})
+VALID_CURVE_DEVICES = frozenset({"custom", "mug", "skinny-tumbler", "canteen"})
 MAX_PANEL_TEXT_LENGTH = 64
 CENTIMETERS_PER_INCH = 2.54
 DEFAULT_PAGE_SIZE = "a4"
@@ -22,6 +23,14 @@ DEFAULT_UNIT = "cm"
 DEFAULT_BADGE_AMOUNTS = {"cm": "3.5", "in": "1.4"}
 DEFAULT_SPACING_AMOUNTS = {"cm": "0.5", "in": "0.2"}
 DEFAULT_LOGO_AMOUNTS = {"cm": "5.0", "in": "2.0"}
+DEFAULT_CURVE_DEVICE = "custom"
+DEFAULT_CURVE_DIAMETER_AMOUNTS = {"cm": "8.0", "in": "3.15"}
+CURVE_DEVICE_DIAMETERS = {
+    "custom": DEFAULT_CURVE_DIAMETER_AMOUNTS,
+    "mug": {"cm": "8.2", "in": "3.23"},
+    "skinny-tumbler": {"cm": "7.3", "in": "2.87"},
+    "canteen": {"cm": "9.0", "in": "3.54"},
+}
 BADGE_AMOUNTS = {
     "cm": frozenset(
         {
@@ -92,6 +101,10 @@ class LayoutOptions:
     front_text: str = ""
     back_text: str = ""
     text_font: str = "ubuntu"
+    include_curve_effect: bool = False
+    curve_device: str = DEFAULT_CURVE_DEVICE
+    curve_diameter: str = DEFAULT_CURVE_DIAMETER_AMOUNTS[DEFAULT_UNIT]
+    curve_diameter_inches: float = 8.0 / CENTIMETERS_PER_INCH
 
 
 def _truthy(value: str | None, default: bool = False) -> bool:
@@ -122,6 +135,20 @@ def _unit_amount_inches(amount: str, unit: str) -> float:
     if unit == "cm":
         return parsed / CENTIMETERS_PER_INCH
     return parsed
+
+
+def _safe_positive_amount(
+    value: str | None,
+    default: str,
+    minimum: float,
+    maximum: float,
+) -> str:
+    try:
+        parsed = float(value if value not in {None, ""} else default)
+    except (TypeError, ValueError):
+        parsed = float(default)
+    parsed = max(minimum, min(parsed, maximum))
+    return f"{parsed:.2f}".rstrip("0").rstrip(".")
 
 
 def _safe_panel_text(value: str | None) -> str:
@@ -158,6 +185,14 @@ def parse_layout_options(
     logo_size = _valid_unit_amount(
         values.get("logo_size"), LOGO_AMOUNTS, DEFAULT_LOGO_AMOUNTS, unit
     )
+    curve_device = _valid_choice(values.get("curve_device"), VALID_CURVE_DEVICES, DEFAULT_CURVE_DEVICE)
+    curve_diameter_default = CURVE_DEVICE_DIAMETERS[curve_device][unit]
+    curve_diameter = _safe_positive_amount(
+        values.get("curve_diameter"),
+        curve_diameter_default,
+        2.5 if unit == "cm" else 1.0,
+        50.0 if unit == "cm" else 20.0,
+    )
 
     return LayoutOptions(
         sides=_valid_sides(getlist("sides")),
@@ -180,4 +215,8 @@ def parse_layout_options(
         front_text=_safe_panel_text(values.get("front_text")),
         back_text=_safe_panel_text(values.get("back_text")),
         text_font=_valid_choice(values.get("text_font"), VALID_TEXT_FONTS, "ubuntu"),
+        include_curve_effect=_truthy(values.get("include_curve_effect")),
+        curve_device=curve_device,
+        curve_diameter=curve_diameter,
+        curve_diameter_inches=_unit_amount_inches(curve_diameter, unit),
     )

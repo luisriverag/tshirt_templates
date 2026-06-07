@@ -4,8 +4,11 @@ from __future__ import annotations
 
 import base64
 import binascii
+import importlib
 import json
+from datetime import UTC, datetime
 from pathlib import Path
+from urllib.parse import parse_qs, urlsplit
 
 from flask import Flask, Response, flash, get_flashed_messages, jsonify, redirect, render_template, request, send_from_directory, url_for
 
@@ -15,6 +18,9 @@ from .options import (
     BADGE_AMOUNTS,
     CENTIMETERS_PER_INCH,
     DEFAULT_BADGE_AMOUNTS,
+    CURVE_DEVICE_DIAMETERS,
+    DEFAULT_CURVE_DEVICE,
+    DEFAULT_CURVE_DIAMETER_AMOUNTS,
     DEFAULT_LOGO_AMOUNTS,
     DEFAULT_SPACING_AMOUNTS,
     DEFAULT_UNIT,
@@ -75,6 +81,33 @@ SPACING_OPTIONS = {
 }
 LOGO_SIZE_OPTIONS = {unit: sorted(amounts, key=float) for unit, amounts in LOGO_AMOUNTS.items()}
 COPY_OPTIONS = list(range(1, 25))
+CURVE_DEVICE_OPTIONS = {
+    "custom": "Custom diameter",
+    "mug": "Standard mug",
+    "skinny-tumbler": "Skinny tumbler / canteen",
+    "canteen": "Wide canteen",
+}
+APP_VERSION = "0.1.0"
+MCP_TRANSPORT = "streamable-http-json-rpc"
+MCP_BADGES_URI_TEMPLATE = "tshirt://badges{?order,include_logo,refresh}"
+MCP_METHODS = [
+    "initialize",
+    "ping",
+    "notifications/initialized",
+    "tools/list",
+    "tools/call",
+    "resources/list",
+    "resources/read",
+    "resources/templates/list",
+    "prompts/list",
+    "prompts/get",
+]
+MCP_PORT_NOTE = (
+    "MCP compatibility depends on configuring clients with the reachable /mcp URL; "
+    "there is no required MCP port. Use --port only to avoid conflicts or expose the server."
+)
+
+
 LOGO_BADGE = Badge(
     id="makespace-logo",
     name="MakeSpace Madrid Logo",
@@ -145,6 +178,39 @@ def badge_to_dict(badge: Badge) -> dict[str, str | None]:
     }
 
 
+def api_index_payload() -> dict:
+    """Return machine-readable API discovery metadata."""
+
+    return {
+        "service": "tshirt_templates",
+        "version": APP_VERSION,
+        "api_version": "v1",
+        "base_path": "/api/v1",
+        "documentation": {
+            "repository_path": "docs/APIDOCS.md",
+            "note": "This Flask app does not serve repository documentation files directly.",
+        },
+        "endpoints": {
+            "health": {"method": "GET", "path": "/api/v1/health"},
+            "ready": {"method": "GET", "path": "/api/v1/ready"},
+            "options": {"method": "GET", "path": "/api/v1/options"},
+            "badges": {"method": "GET", "path": "/api/v1/badges"},
+            "uploads": {"method": "POST", "path": "/api/v1/uploads"},
+            "upload": {"methods": ["PUT", "DELETE"], "path": "/api/v1/uploads/{filename}"},
+            "layout_preview": {"method": "POST", "path": "/api/v1/layouts/preview"},
+            "pdf": {"method": "POST", "path": "/api/v1/pdfs"},
+            "templates": {"methods": ["GET", "POST"], "path": "/api/v1/templates"},
+            "template": {"methods": ["GET", "DELETE"], "path": "/api/v1/templates/{name}"},
+        },
+        "mcp": {
+            "endpoint": "/mcp",
+            "transport": MCP_TRANSPORT,
+            "methods": MCP_METHODS,
+            "resource_templates": [MCP_BADGES_URI_TEMPLATE],
+            "port_note": MCP_PORT_NOTE,
+        },
+    }
+
 def options_payload() -> dict:
     """Return supported option values and defaults for API consumers."""
 
@@ -158,6 +224,8 @@ def options_payload() -> dict:
         "badge_size_options": BADGE_SIZE_OPTIONS,
         "spacing_options": SPACING_OPTIONS,
         "logo_size_options": LOGO_SIZE_OPTIONS,
+        "curve_device_options": CURVE_DEVICE_OPTIONS,
+        "curve_device_diameters": CURVE_DEVICE_DIAMETERS,
         "copy_options": COPY_OPTIONS,
         "defaults": {
             "page_size": "a4",
@@ -174,6 +242,9 @@ def options_payload() -> dict:
             "mirror": True,
             "include_print_marks": False,
             "include_cut_lines": False,
+            "include_curve_effect": False,
+            "curve_device": DEFAULT_CURVE_DEVICE,
+            "curve_diameter": DEFAULT_CURVE_DIAMETER_AMOUNTS[DEFAULT_UNIT],
             "front_text": "",
             "back_text": "",
             "text_font": "ubuntu",
@@ -315,6 +386,7 @@ def json_getlist(options: dict):
 def create_app() -> Flask:
     app = Flask(__name__, template_folder="../templates", static_folder="../static")
     app.config.setdefault("UPLOAD_FOLDER", str(Path(app.instance_path) / "uploads"))
+    app.config.setdefault("TEMPLATE_FOLDER", str(Path(app.instance_path) / "templates"))
     app.config.setdefault("MAX_CONTENT_LENGTH", 32 * 1024 * 1024)
     app.secret_key = app.config.get("SECRET_KEY") or "dev-upload-warnings"
 
@@ -336,6 +408,9 @@ def create_app() -> Flask:
             default_badge_amounts=DEFAULT_BADGE_AMOUNTS,
             default_spacing_amounts=DEFAULT_SPACING_AMOUNTS,
             default_logo_amounts=DEFAULT_LOGO_AMOUNTS,
+            default_curve_diameter_amounts=DEFAULT_CURVE_DIAMETER_AMOUNTS,
+            curve_device_options=CURVE_DEVICE_OPTIONS,
+            curve_device_diameters=CURVE_DEVICE_DIAMETERS,
             badge_size_options=BADGE_SIZE_OPTIONS,
             spacing_options=SPACING_OPTIONS,
             logo_size_options=LOGO_SIZE_OPTIONS,
@@ -373,6 +448,10 @@ def create_app() -> Flask:
             for warning in warnings:
                 flash(warning.message)
         return redirect(url_for("index"))
+
+    @app.get("/api/v1")
+    def api_index() -> Response:
+        return jsonify(api_index_payload())
 
     @app.get("/api/v1/health")
     def api_health() -> Response:
@@ -479,6 +558,14 @@ def create_app() -> Flask:
                 400,
             )
         options, render_badges, page_size, layouts = _json_layout_parts(payload)
+        asset_failures = _pdf_asset_failures(render_badges)
+        if asset_failures:
+            return _api_error(
+                "asset_verification_failed",
+                "One or more badge assets could not be fetched or rendered.",
+                422,
+                failures=asset_failures,
+            )
         from .pdf import render_pdf
 
         content = render_pdf(
@@ -489,6 +576,7 @@ def create_app() -> Flask:
             panel_text=_panel_text_options(options),
             print_marks=options.include_print_marks,
             cut_lines=options.include_cut_lines,
+            curve_settings=_curve_settings(options),
             metadata=_pdf_metadata(options),
         )
         return Response(
@@ -497,14 +585,57 @@ def create_app() -> Flask:
             headers={"Content-Disposition": "attachment; filename=tshirt-badge-template.pdf"},
         )
 
+
+    @app.get("/api/v1/templates")
+    def api_list_templates() -> Response:
+        return jsonify({"templates": _list_saved_templates()})
+
+    @app.post("/api/v1/templates")
+    def api_save_template() -> tuple[Response, int] | Response:
+        payload = request.get_json(silent=True)
+        if not isinstance(payload, dict):
+            return _api_error(
+                "invalid_json",
+                "Submit a JSON object with name and template fields.",
+                400,
+            )
+        result, error = _save_template_payload(payload)
+        if error:
+            return _api_error(error["code"], error["message"], 400, field=error.get("field"))
+        return jsonify(result), 201
+
+    @app.get("/api/v1/templates/<path:name>")
+    def api_get_template(name: str) -> Response | tuple[Response, int]:
+        template = _read_saved_template(name)
+        if template is None:
+            return _api_error(
+                "template_not_found",
+                "No saved template exists for that name.",
+                404,
+                field="name",
+            )
+        return jsonify(template)
+
+    @app.delete("/api/v1/templates/<path:name>")
+    def api_delete_template(name: str) -> Response | tuple[Response, int]:
+        deleted = _delete_saved_template(name)
+        if deleted is None:
+            return _api_error(
+                "template_not_found",
+                "No saved template exists for that name.",
+                404,
+                field="name",
+            )
+        return jsonify({"deleted": deleted})
+
     @app.get("/mcp")
     def mcp_metadata() -> Response:
         return jsonify(_mcp_metadata())
 
     @app.post("/mcp")
     def mcp_json_rpc() -> Response:
-        message = request.get_json(silent=True) or {}
-        response = _handle_mcp_message(message)
+        message = request.get_json(silent=True)
+        response = _handle_mcp_payload(message)
         return jsonify(response)
 
     @app.post("/preview")
@@ -556,6 +687,9 @@ def create_app() -> Flask:
         page_size, layouts = _layout_from_form(badge_ids)
         layouts = _append_logo_placements(layouts)
         layouts = _apply_manual_placements(layouts, page_size)
+        asset_failures = _pdf_asset_failures(badges)
+        if asset_failures:
+            return _pdf_asset_failure_response(asset_failures)
         from .pdf import render_pdf
 
         options = _layout_options()
@@ -567,6 +701,7 @@ def create_app() -> Flask:
             panel_text=_panel_text_options(options),
             print_marks=options.include_print_marks,
             cut_lines=options.include_cut_lines,
+            curve_settings=_curve_settings(options),
             metadata=_pdf_metadata(options),
         )
         return Response(
@@ -602,6 +737,14 @@ def create_app() -> Flask:
             "font": options.text_font,
         }
 
+    def _curve_settings(options) -> dict[str, float] | None:
+        if not options.include_curve_effect:
+            return None
+        return {
+            "device": options.curve_device,
+            "diameter_inches": options.curve_diameter_inches,
+        }
+
     def _pdf_metadata(options) -> dict[str, str]:
         return {
             "page_size": options.page_size,
@@ -617,6 +760,9 @@ def create_app() -> Flask:
             "include_logo": str(options.include_logo).lower(),
             "include_print_marks": str(options.include_print_marks).lower(),
             "include_cut_lines": str(options.include_cut_lines).lower(),
+            "include_curve_effect": str(options.include_curve_effect).lower(),
+            "curve_device": options.curve_device,
+            "curve_diameter": options.curve_diameter,
             "text_font": options.text_font,
         }
 
@@ -707,13 +853,161 @@ def create_app() -> Flask:
         status: int,
         field: str | None = None,
         allowed_values: list[str] | None = None,
+        failures: list[dict[str, str]] | None = None,
     ) -> tuple[Response, int]:
-        error: dict[str, str | list[str]] = {"code": code, "message": message}
+        error: dict[str, str | list[str] | list[dict[str, str]]] = {"code": code, "message": message}
         if field:
             error["field"] = field
         if allowed_values:
             error["allowed_values"] = allowed_values
+        if failures:
+            error["failures"] = failures
         return jsonify({"error": error}), status
+
+    def _pdf_asset_failures(badges: list[Badge]) -> list[dict[str, str]]:
+        pdf_module = importlib.import_module("tshirt_templates.pdf")
+        verifier = getattr(pdf_module, "verify_pdf_assets", lambda badge_list: [])
+        return verifier(badges)
+
+    def _pdf_asset_failure_response(failures: list[dict[str, str]]) -> tuple[Response, int]:
+        return _api_error(
+            "asset_verification_failed",
+            "One or more badge assets could not be fetched or rendered.",
+            422,
+            failures=failures,
+        )
+
+    def _template_folder() -> Path:
+        return Path(app.config["TEMPLATE_FOLDER"])
+
+    def _template_name(value) -> str | None:
+        name = str(value or "").strip()
+        if name.endswith(".json"):
+            name = name[:-5]
+        if not name or len(name) > 80:
+            return None
+        allowed = set("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789._-")
+        if any(character not in allowed for character in name):
+            return None
+        if name in {".", ".."} or ".." in name.split("."):
+            return None
+        return name
+
+    def _template_path(name: str) -> Path | None:
+        safe_name = _template_name(name)
+        if safe_name is None:
+            return None
+        return _template_folder() / f"{safe_name}.json"
+
+    def _template_summary(path: Path) -> dict | None:
+        try:
+            payload = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            return None
+        if not isinstance(payload, dict):
+            return None
+        template = payload.get("template", {})
+        if not isinstance(template, dict):
+            template = {}
+        return {
+            "name": payload.get("name", path.stem),
+            "created_at": payload.get("created_at"),
+            "updated_at": payload.get("updated_at"),
+            "badge_count": len(template.get("badge_ids", [])) if isinstance(template.get("badge_ids"), list) else 0,
+            "options": template.get("options", {}) if isinstance(template.get("options"), dict) else {},
+        }
+
+    def _list_saved_templates() -> list[dict]:
+        folder = _template_folder()
+        try:
+            folder.mkdir(parents=True, exist_ok=True)
+        except OSError:
+            return []
+        summaries = []
+        for path in sorted(folder.glob("*.json")):
+            summary = _template_summary(path)
+            if summary is not None:
+                summaries.append(summary)
+        return summaries
+
+    def _read_saved_template(name: str) -> dict | None:
+        path = _template_path(name)
+        if path is None or not path.exists():
+            return None
+        try:
+            payload = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            return None
+        return payload if isinstance(payload, dict) else None
+
+    def _normalize_template_payload(template) -> dict | None:
+        if not isinstance(template, dict):
+            return None
+        badge_ids = template.get("badge_ids", [])
+        options = template.get("options", {})
+        manual_placements = template.get("manual_placements", [])
+        if not isinstance(badge_ids, list) or not isinstance(options, dict):
+            return None
+        if not isinstance(manual_placements, list):
+            manual_placements = []
+        return {
+            "badge_ids": [str(badge_id) for badge_id in badge_ids],
+            "options": options,
+            "manual_placements": [item for item in manual_placements if isinstance(item, dict)],
+        }
+
+    def _save_template_payload(payload: dict) -> tuple[dict | None, dict | None]:
+        safe_name = _template_name(payload.get("name"))
+        if safe_name is None:
+            return None, {
+                "code": "invalid_template_name",
+                "message": "Template name must be 1-80 characters using letters, numbers, dots, dashes, or underscores.",
+                "field": "name",
+            }
+        template = _normalize_template_payload(payload.get("template"))
+        if template is None:
+            return None, {
+                "code": "invalid_template",
+                "message": "Template must include badge_ids as an array and options as an object.",
+                "field": "template",
+            }
+        folder = _template_folder()
+        try:
+            folder.mkdir(parents=True, exist_ok=True)
+        except OSError:
+            return None, {
+                "code": "template_storage_unavailable",
+                "message": "Template storage folder cannot be created.",
+                "field": "name",
+            }
+        path = folder / f"{safe_name}.json"
+        now = datetime.now(UTC).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+        existing = _read_saved_template(safe_name) or {}
+        saved = {
+            "name": safe_name,
+            "created_at": existing.get("created_at", now),
+            "updated_at": now,
+            "template": template,
+        }
+        try:
+            path.write_text(json.dumps(saved, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+        except OSError:
+            return None, {
+                "code": "template_storage_unavailable",
+                "message": "Template file cannot be written.",
+                "field": "name",
+            }
+        return saved, None
+
+    def _delete_saved_template(name: str) -> str | None:
+        path = _template_path(name)
+        if path is None or not path.exists():
+            return None
+        try:
+            path.unlink()
+        except OSError:
+            return None
+        return path.stem
 
     def _json_layout_parts(payload: dict):
         raw_options = payload.get("options", {})
@@ -775,6 +1069,9 @@ def create_app() -> Flask:
                 "mirror": options.mirror,
                 "include_print_marks": options.include_print_marks,
                 "include_cut_lines": options.include_cut_lines,
+                "include_curve_effect": options.include_curve_effect,
+                "curve_device": options.curve_device,
+                "curve_diameter": options.curve_diameter,
                 "front_text": options.front_text,
                 "back_text": options.back_text,
                 "text_font": options.text_font,
@@ -784,8 +1081,10 @@ def create_app() -> Flask:
     def _mcp_metadata() -> dict:
         return {
             "name": "tshirt_templates",
+            "version": APP_VERSION,
             "protocol": "mcp-json-rpc",
             "endpoint": "/mcp",
+            "transport": MCP_TRANSPORT,
             "capabilities": {"tools": True, "resources": True, "prompts": True},
             "tools": [
                 "get_options",
@@ -794,8 +1093,14 @@ def create_app() -> Flask:
                 "render_pdf",
                 "upload_badge_artwork",
                 "validate_template",
+                "list_saved_templates",
+                "save_template",
+                "get_saved_template",
+                "delete_saved_template",
             ],
-            "resources": ["tshirt://options", "tshirt://badges"],
+            "resources": ["tshirt://options", "tshirt://badges", "tshirt://templates"],
+            "resource_templates": [MCP_BADGES_URI_TEMPLATE],
+            "port_note": MCP_PORT_NOTE,
         }
 
     def _mcp_tools() -> list[dict]:
@@ -864,13 +1169,51 @@ def create_app() -> Flask:
                     },
                 },
             },
+            {
+                "name": "list_saved_templates",
+                "description": "List saved JSON template files for repeatable local workflows.",
+                "inputSchema": {"type": "object", "properties": {}},
+            },
+            {
+                "name": "save_template",
+                "description": "Save a named JSON template request with badge IDs, options, and optional manual placements.",
+                "inputSchema": {
+                    "type": "object",
+                    "required": ["name", "template"],
+                    "properties": {
+                        "name": {"type": "string"},
+                        "template": {"type": "object"},
+                    },
+                },
+            },
+            {
+                "name": "get_saved_template",
+                "description": "Read a saved JSON template file by name.",
+                "inputSchema": {
+                    "type": "object",
+                    "required": ["name"],
+                    "properties": {"name": {"type": "string"}},
+                },
+            },
+            {
+                "name": "delete_saved_template",
+                "description": "Delete a saved JSON template file by name.",
+                "inputSchema": {
+                    "type": "object",
+                    "required": ["name"],
+                    "properties": {"name": {"type": "string"}},
+                },
+            },
         ]
 
     def _mcp_result(message_id, payload: dict) -> dict:
         return {"jsonrpc": "2.0", "id": message_id, "result": payload}
 
-    def _mcp_error(message_id, code: int, message: str) -> dict:
-        return {"jsonrpc": "2.0", "id": message_id, "error": {"code": code, "message": message}}
+    def _mcp_error(message_id, code: int, message: str, data: dict | None = None) -> dict:
+        error = {"code": code, "message": message}
+        if data:
+            error["data"] = data
+        return {"jsonrpc": "2.0", "id": message_id, "error": error}
 
     def _mcp_tool_result(structured_content: dict, text: str | None = None) -> dict:
         result = {"structuredContent": structured_content}
@@ -891,6 +1234,15 @@ def create_app() -> Flask:
 
     def _mcp_render_pdf(arguments: dict) -> dict:
         options, render_badges, page_size, layouts = _json_layout_parts(arguments)
+        asset_failures = _pdf_asset_failures(render_badges)
+        if asset_failures:
+            return {
+                "error": {
+                    "code": "asset_verification_failed",
+                    "message": "One or more badge assets could not be fetched or rendered.",
+                    "failures": asset_failures,
+                }
+            }
         from .pdf import render_pdf
 
         content = render_pdf(
@@ -901,6 +1253,7 @@ def create_app() -> Flask:
             panel_text=_panel_text_options(options),
             print_marks=options.include_print_marks,
             cut_lines=options.include_cut_lines,
+            curve_settings=_curve_settings(options),
             metadata=_pdf_metadata(options),
         )
         encoded = base64.b64encode(content).decode("ascii")
@@ -961,21 +1314,56 @@ def create_app() -> Flask:
             )
         return {"normalized": normalized, "warnings": warnings}
 
+    def _truthy(value) -> bool:
+        return str(value).lower() in {"1", "true", "yes", "on"}
+
+    def _mcp_badges_from_uri(uri: str) -> list[Badge] | None:
+        parsed = urlsplit(uri)
+        if parsed.scheme != "tshirt" or parsed.netloc != "badges" or parsed.path not in {"", "/"}:
+            return None
+        query = parse_qs(parsed.query)
+        if _truthy(query.get("refresh", [False])[0]):
+            refresh_badges()
+        order = str(query.get("order", ["alphabetical"])[0])
+        badges = order_badges(_available_badges(), order)
+        if _truthy(query.get("include_logo", [False])[0]):
+            badges = [*badges, LOGO_BADGE]
+        return badges
+
+    def _handle_mcp_payload(message) -> dict | list[dict]:
+        if isinstance(message, list):
+            if not message:
+                return _mcp_error(None, -32600, "Invalid MCP request: batch must not be empty.")
+            return [
+                _handle_mcp_message(item)
+                if isinstance(item, dict)
+                else _mcp_error(None, -32600, "Invalid MCP request: batch items must be JSON-RPC objects.")
+                for item in message
+            ]
+        if not isinstance(message, dict):
+            return _mcp_error(None, -32600, "Invalid MCP request: submit a JSON-RPC object or batch array.")
+        return _handle_mcp_message(message)
+
     def _handle_mcp_message(message: dict) -> dict:
         method = message.get("method")
         message_id = message.get("id")
-        params = message.get("params") or {}
+        params = message.get("params", {})
+        if params is None:
+            params = {}
+        if not isinstance(params, dict):
+            return _mcp_error(message_id, -32602, "Invalid MCP params: params must be an object.")
         if method == "initialize":
+            requested_version = params.get("protocolVersion")
             return _mcp_result(
                 message_id,
                 {
-                    "protocolVersion": "2024-11-05",
+                    "protocolVersion": requested_version or "2024-11-05",
                     "capabilities": {
                         "tools": {"listChanged": False},
                         "resources": {"subscribe": False, "listChanged": False},
                         "prompts": {"listChanged": False},
                     },
-                    "serverInfo": {"name": "tshirt_templates", "version": "0.1.0"},
+                    "serverInfo": {"name": "tshirt_templates", "version": APP_VERSION},
                 },
             )
         if method == "ping":
@@ -991,20 +1379,45 @@ def create_app() -> Flask:
                     "resources": [
                         {"uri": "tshirt://options", "name": "Template options", "mimeType": "application/json"},
                         {"uri": "tshirt://badges", "name": "Badge catalog", "mimeType": "application/json"},
+                        {"uri": "tshirt://templates", "name": "Saved templates", "mimeType": "application/json"},
                     ]
                 },
             )
         if method == "resources/templates/list":
-            return _mcp_result(message_id, {"resourceTemplates": []})
+            return _mcp_result(
+                message_id,
+                {
+                    "resourceTemplates": [
+                        {
+                            "uriTemplate": MCP_BADGES_URI_TEMPLATE,
+                            "name": "Badge catalog with optional ordering and logo inclusion",
+                            "mimeType": "application/json",
+                        },
+                        {
+                            "uriTemplate": "tshirt://templates/{name}",
+                            "name": "Saved template by name",
+                            "mimeType": "application/json",
+                        }
+                    ]
+                },
+            )
         if method == "resources/read":
             uri = params.get("uri")
             if uri == "tshirt://options":
                 return _mcp_result(message_id, _mcp_json_resource(uri, options_payload()))
-            if uri == "tshirt://badges":
-                badges = order_badges(_available_badges(), "alphabetical")
+            if uri == "tshirt://templates":
+                return _mcp_result(message_id, _mcp_json_resource(uri, {"templates": _list_saved_templates()}))
+            if isinstance(uri, str) and uri.startswith("tshirt://templates/"):
+                template_name = uri.removeprefix("tshirt://templates/")
+                template = _read_saved_template(template_name)
+                if template is not None:
+                    return _mcp_result(message_id, _mcp_json_resource(uri, template))
+                return _mcp_error(message_id, -32602, f"Unknown template resource: {uri}")
+            badges = _mcp_badges_from_uri(str(uri))
+            if badges is not None:
                 return _mcp_result(
                     message_id,
-                    _mcp_json_resource(uri, {"badges": [badge_to_dict(badge) for badge in badges]}),
+                    _mcp_json_resource(str(uri), {"badges": [badge_to_dict(badge) for badge in badges]}),
                 )
             return _mcp_error(message_id, -32602, f"Unknown resource: {uri}")
         if method == "prompts/list":
@@ -1041,7 +1454,7 @@ def create_app() -> Flask:
             )
         if method == "tools/call":
             tool_name = params.get("name")
-            arguments = params.get("arguments") or {}
+            arguments = params.get("arguments", params.get("input", {})) or {}
             if not isinstance(arguments, dict):
                 arguments = {}
             if tool_name == "get_options":
@@ -1066,6 +1479,13 @@ def create_app() -> Flask:
                 return _mcp_result(message_id, _mcp_tool_result(payload, "Computed template layout."))
             if tool_name == "render_pdf":
                 payload = _mcp_render_pdf(arguments)
+                if "error" in payload:
+                    return _mcp_error(
+                        message_id,
+                        -32602,
+                        payload["error"]["message"],
+                        {"code": payload["error"]["code"], "failures": payload["error"].get("failures", [])},
+                    )
                 result = _mcp_tool_result(payload, f"Rendered {payload['byte_length']} PDF bytes.")
                 result["content"].append({"type": "resource", "resource": payload["resource"]})
                 return _mcp_result(message_id, result)
@@ -1080,6 +1500,27 @@ def create_app() -> Flask:
                     message_id,
                     _mcp_tool_result(payload, f"Validation returned {len(payload['warnings'])} warnings."),
                 )
+            if tool_name == "list_saved_templates":
+                payload = {"templates": _list_saved_templates()}
+                return _mcp_result(
+                    message_id,
+                    _mcp_tool_result(payload, f"Returned {len(payload['templates'])} saved templates."),
+                )
+            if tool_name == "save_template":
+                result, error = _save_template_payload(arguments)
+                if error:
+                    return _mcp_error(message_id, -32602, error["message"])
+                return _mcp_result(message_id, _mcp_tool_result(result, "Saved template."))
+            if tool_name == "get_saved_template":
+                template = _read_saved_template(str(arguments.get("name", "")))
+                if template is None:
+                    return _mcp_error(message_id, -32602, "No saved template exists for that name.")
+                return _mcp_result(message_id, _mcp_tool_result(template, "Returned saved template."))
+            if tool_name == "delete_saved_template":
+                deleted = _delete_saved_template(str(arguments.get("name", "")))
+                if deleted is None:
+                    return _mcp_error(message_id, -32602, "No saved template exists for that name.")
+                return _mcp_result(message_id, _mcp_tool_result({"deleted": deleted}, "Deleted saved template."))
             return _mcp_error(message_id, -32602, f"Unknown tool: {tool_name}")
         return _mcp_error(message_id, -32601, f"Unknown MCP method: {method}")
 

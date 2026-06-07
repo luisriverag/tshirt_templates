@@ -25,6 +25,9 @@ def test_parse_layout_options_accepts_valid_values():
         "text_font": "dejavu",
         "include_print_marks": "on",
         "include_cut_lines": "on",
+        "include_curve_effect": "on",
+        "curve_device": "mug",
+        "curve_diameter": "3.25",
     }
 
     assert parse_layout_options(values, _getlist({"sides": ["back"]})) == LayoutOptions(
@@ -48,6 +51,10 @@ def test_parse_layout_options_accepts_valid_values():
         text_font="dejavu",
         include_print_marks=True,
         include_cut_lines=True,
+        include_curve_effect=True,
+        curve_device="mug",
+        curve_diameter="3.25",
+        curve_diameter_inches=3.25,
     )
 
 
@@ -68,6 +75,9 @@ def test_parse_layout_options_normalizes_invalid_values():
         "text_font": "papyrus",
         "include_print_marks": "maybe",
         "include_cut_lines": "maybe",
+        "include_curve_effect": "maybe",
+        "curve_device": "bucket",
+        "curve_diameter": "0",
     }
 
     options = parse_layout_options(values, _getlist({"sides": ["front", "sleeve"]}))
@@ -92,6 +102,10 @@ def test_parse_layout_options_normalizes_invalid_values():
         text_font="ubuntu",
         include_print_marks=False,
         include_cut_lines=False,
+        include_curve_effect=False,
+        curve_device="custom",
+        curve_diameter="2.5",
+        curve_diameter_inches=approx(2.5 / 2.54),
     )
 
 
@@ -125,10 +139,23 @@ def test_parse_layout_options_accepts_alphabetical_order():
 
 def test_parse_layout_options_converts_centimeters_to_inches():
     options = parse_layout_options(
-        {"unit": "cm", "badge_size": "10.0", "spacing": "2.0", "logo_size": "15.0"},
+        {"unit": "cm", "badge_size": "10.0", "spacing": "2.0", "logo_size": "15.0", "curve_diameter": "12.0"},
         _getlist({"sides": ["front"]}),
     )
 
     assert options.badge_size_inches == approx(10.0 / 2.54)
     assert options.spacing_inches == approx(2.0 / 2.54)
     assert options.logo_size_inches == approx(15.0 / 2.54)
+    assert options.curve_diameter_inches == approx(12.0 / 2.54)
+
+
+def test_parse_layout_options_uses_curve_device_preset_when_no_diameter_is_supplied():
+    options = parse_layout_options(
+        {"unit": "cm", "curve_device": "mug", "include_curve_effect": "on"},
+        _getlist({"sides": ["front"]}),
+    )
+
+    assert options.include_curve_effect is True
+    assert options.curve_device == "mug"
+    assert options.curve_diameter == "8.2"
+    assert options.curve_diameter_inches == approx(8.2 / 2.54)

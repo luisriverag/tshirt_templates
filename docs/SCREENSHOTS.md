@@ -21,3 +21,14 @@ python scripts/render_preview_controls_screenshot.py docs/screenshots/preview-sn
 ```
 
 The generated screenshot shows the preview toolbar controls for zoom, snap-to-grid, snap-to-panel-edge placement, and high-contrast preview outlines.
+
+
+## Curve controls
+
+Generate the curve-controls screenshot locally with:
+
+```sh
+python scripts/render_curve_controls_screenshot.py docs/screenshots/curve-controls.png
+```
+
+The generated screenshot shows the mug/canteen curved-adapter device preset, diameter input, and enable checkbox.
