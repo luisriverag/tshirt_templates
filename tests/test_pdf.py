@@ -93,6 +93,36 @@ def test_render_pdf_smoke_checks_page_size_and_placement_count(monkeypatch):
     assert len(drawn) == 2
 
 
+def test_render_pdf_does_not_draw_panel_headers_or_page_numbers(monkeypatch):
+    drawn_text = []
+    original_canvas = pdf_module.canvas.Canvas
+
+    class TrackingCanvas(original_canvas):
+        def drawString(self, x, y, text):
+            drawn_text.append(str(text))
+            return super().drawString(x, y, text)
+
+        def drawCentredString(self, x, y, text):
+            drawn_text.append(str(text))
+            return super().drawCentredString(x, y, text)
+
+        def drawRightString(self, x, y, text):
+            drawn_text.append(str(text))
+            return super().drawRightString(x, y, text)
+
+    monkeypatch.setattr(pdf_module.canvas, "Canvas", TrackingCanvas)
+
+    content = render_pdf(
+        [],
+        (200.0, 300.0),
+        [PanelLayout("front", 20.0, 20.0, 160.0, 120.0, [])],
+        mirror=False,
+    )
+
+    assert content.startswith(b"%PDF")
+    assert drawn_text == []
+
+
 def test_render_pdf_fetches_each_badge_asset_once_for_repeated_placements(monkeypatch):
     badge = Badge(
         id="demo-badge.svg",

@@ -565,7 +565,8 @@ def create_app() -> Flask:
             )
         options, render_badges, page_size, layouts = _json_layout_parts(payload)
         asset_failures = _pdf_asset_failures(render_badges)
-        if asset_failures:
+        allow_partial = bool(payload.get("allow_partial"))
+        if asset_failures and not allow_partial:
             return _api_error(
                 "asset_verification_failed",
                 "One or more badge assets could not be fetched or rendered.",
@@ -573,6 +574,11 @@ def create_app() -> Flask:
                 failures=asset_failures,
             )
         from .pdf import render_pdf
+
+        metadata = _pdf_metadata(options)
+        if asset_failures:
+            metadata["asset_failures"] = str(len(asset_failures))
+            metadata["allow_partial"] = "true"
 
         content = render_pdf(
             render_badges,
@@ -583,12 +589,15 @@ def create_app() -> Flask:
             print_marks=options.include_print_marks,
             cut_lines=options.include_cut_lines,
             curve_settings=_curve_settings(options),
-            metadata=_pdf_metadata(options),
+            metadata=metadata,
         )
+        headers = {"Content-Disposition": "attachment; filename=tshirt-badge-template.pdf"}
+        if asset_failures:
+            headers["X-Badgeware-Warnings"] = json.dumps({"asset_failures": asset_failures})
         return Response(
             content,
             mimetype="application/pdf",
-            headers={"Content-Disposition": "attachment; filename=tshirt-badge-template.pdf"},
+            headers=headers,
         )
 
 
@@ -694,11 +703,13 @@ def create_app() -> Flask:
         layouts = _append_logo_placements(layouts)
         layouts = _apply_manual_placements(layouts, page_size)
         asset_failures = _pdf_asset_failures(badges)
-        if asset_failures:
-            return _pdf_asset_failure_response(asset_failures)
         from .pdf import render_pdf
 
         options = _layout_options()
+        metadata = _pdf_metadata(options)
+        if asset_failures:
+            metadata["asset_failures"] = str(len(asset_failures))
+            metadata["allow_partial"] = "true"
         content = render_pdf(
             badges,
             page_size,
@@ -708,12 +719,15 @@ def create_app() -> Flask:
             print_marks=options.include_print_marks,
             cut_lines=options.include_cut_lines,
             curve_settings=_curve_settings(options),
-            metadata=_pdf_metadata(options),
+            metadata=metadata,
         )
+        headers = {"Content-Disposition": "attachment; filename=tshirt-badge-template.pdf"}
+        if asset_failures:
+            headers["X-Badgeware-Warnings"] = json.dumps({"asset_failures": asset_failures})
         return Response(
             content,
             mimetype="application/pdf",
-            headers={"Content-Disposition": "attachment; filename=tshirt-badge-template.pdf"},
+            headers=headers,
         )
 
     def _upload_folder() -> str:
@@ -1281,6 +1295,14 @@ def create_app() -> Flask:
             }
         asset_failures = _pdf_asset_failures(render_badges)
         if asset_failures:
+            warnings.append(
+                {
+                    "code": "asset_verification_failed",
+                    "message": "One or more badge assets could not be fetched or rendered; placeholders will be drawn for failed assets.",
+                    "failures": asset_failures,
+                }
+            )
+        if asset_failures and not allow_partial:
             return {
                 "error": {
                     "code": "asset_verification_failed",
@@ -1289,6 +1311,11 @@ def create_app() -> Flask:
                 }
             }
         from .pdf import render_pdf
+
+        metadata = _pdf_metadata(options)
+        if asset_failures:
+            metadata["asset_failures"] = str(len(asset_failures))
+            metadata["allow_partial"] = "true"
 
         content = render_pdf(
             render_badges,
@@ -1299,7 +1326,7 @@ def create_app() -> Flask:
             print_marks=options.include_print_marks,
             cut_lines=options.include_cut_lines,
             curve_settings=_curve_settings(options),
-            metadata=_pdf_metadata(options),
+            metadata=metadata,
         )
         encoded = base64.b64encode(content).decode("ascii")
         return {

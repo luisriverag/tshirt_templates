@@ -330,7 +330,7 @@ Response:
 
 ### `POST /api/v1/pdfs`
 
-Generates a PDF from the same JSON layout request shape used by `/api/v1/layouts/preview`. The endpoint applies badge ordering, copies, optional logo placement, optional panel text, manual placement overrides, mirror settings, and optional cylindrical curve compensation for mug/canteen heater adapters. Before rendering, the server verifies that every resolved badge asset can be fetched and parsed by the PDF renderer; failures return `422 asset_verification_failed` with per-badge details. Successful responses return `application/pdf` bytes directly.
+Generates a PDF from the same JSON layout request shape used by `/api/v1/layouts/preview`. The endpoint applies badge ordering, copies, optional logo placement, optional panel text, manual placement overrides, mirror settings, and optional cylindrical curve compensation for mug/canteen heater adapters. Generated template PDFs do not include automatic panel headers or page numbers. Before rendering, the server verifies that every resolved badge asset can be fetched and parsed by the PDF renderer; by default failures return `422 asset_verification_failed` with per-badge details. Set top-level `allow_partial` to `true` to still receive an `application/pdf` response with failed assets drawn as placeholders and the failure details in the `X-Badgeware-Warnings` response header. Browser form PDF downloads always use this partial-render behavior so one broken remote asset does not block the whole PDF.
 
 Request:
 
@@ -358,7 +358,8 @@ Request:
     "back_text": "MakeSpace Madrid",
     "text_font": "ubuntu"
   },
-  "manual_placements": []
+  "manual_placements": [],
+  "allow_partial": false
 }
 ```
 
@@ -367,7 +368,10 @@ Response:
 ```text
 Content-Type: application/pdf
 Content-Disposition: attachment; filename=tshirt-badge-template.pdf
+X-Badgeware-Warnings: {"asset_failures":[...]}
 ```
+
+`X-Badgeware-Warnings` is only present when partial rendering was used because at least one asset failed verification.
 
 Job-based generation remains a future option if templates become multi-page or asset-heavy.
 
@@ -569,7 +573,7 @@ Inputs:
 }
 ```
 
-Before rendering, MCP checks that every requested badge ID resolved to a renderable placement. By default it returns `render_preflight_failed` instead of delivering a partial PDF when badge IDs are unknown or the layout is empty; set `allow_partial` to `true` to receive a PDF with `warnings` and `diagnostics` describing omitted IDs, layout counts, and placement counts.
+Before rendering, MCP checks that every requested badge ID resolved to a renderable placement and every resolved badge asset can be fetched and parsed. By default it returns `render_preflight_failed` for unknown badges or empty layouts and `asset_verification_failed` for broken assets instead of delivering a partial PDF; set `allow_partial` to `true` to receive a PDF with `warnings` and `diagnostics` describing omitted IDs, failed assets drawn as placeholders, layout counts, and placement counts. Generated PDFs omit automatic panel headers and page numbers; only user-supplied panel text is drawn as text.
 
 Outputs `mime_type`, `filename`, `byte_length`, base64-encoded PDF bytes in `pdf_base64`, `warnings`, `diagnostics`, and a `resource` object with `uri`, `mimeType`, and `blob`. The tool result also includes text and resource content items for clients that prefer MCP content blocks.
 
