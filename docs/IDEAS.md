@@ -2,16 +2,9 @@
 
 This backlog only tracks work that is not already available in the current app. Implemented items have been moved into `README.md`, `docs/SPECS.md`, or `docs/APIDOCS.md`.
 
-## User Experience
-
-- Add multi-select movement so several badges can be dragged together.
-
 ## Layout and Geometry
 
-- Add alignment tools: center horizontally, center vertically, distribute evenly, align left/right/top/bottom.
-- Add density-aware layouts that automatically shrink spacing to fit selected badges.
 - Add support for multi-page layouts when selected badges do not fit comfortably.
-- Add automatic margin controls per panel and per page.
 - Add custom panel templates for sleeves, pockets, and kids/adult shirt sizes.
 - Add support for locking individual badges before re-running automatic layout.
 

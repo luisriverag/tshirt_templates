@@ -30,6 +30,53 @@ def test_grid_layout_places_each_copy_on_each_selected_panel():
     assert all(len(layout.placements) == 4 for layout in layouts)
 
 
+
+
+def test_custom_page_margin_and_panel_gap_change_panel_geometry():
+    _, default_layouts = place_badges(["alpha"], ["front", "back"])
+    _, custom_layouts = place_badges(
+        ["alpha"],
+        ["front", "back"],
+        page_margin_inches=1.0,
+        panel_gap_inches=1.0,
+    )
+
+    assert custom_layouts[0].x > default_layouts[0].x
+    assert custom_layouts[0].width < default_layouts[0].width
+    assert custom_layouts[1].x - (custom_layouts[0].x + custom_layouts[0].width) == 72.0
+
+def test_grid_layout_shrinks_spacing_to_keep_dense_badges_in_bounds():
+    _, layouts = place_badges(
+        [f"badge-{index}" for index in range(20)],
+        ["front", "back"],
+        mode="grid",
+        badge_size_inches=1.0,
+        spacing_inches=0.5,
+    )
+
+    assert len(layouts) == 2
+    for layout in layouts:
+        assert len(layout.placements) == 20
+        for placement in layout.placements:
+            assert layout.x <= placement.x <= layout.x + layout.width - placement.width
+            assert layout.y <= placement.y <= layout.y + layout.height - placement.height
+
+
+def test_rows_layout_shrinks_spacing_to_keep_dense_badges_in_bounds():
+    _, layouts = place_badges(
+        [f"badge-{index}" for index in range(20)],
+        ["front", "back"],
+        mode="rows",
+        badge_size_inches=1.0,
+        spacing_inches=0.5,
+    )
+
+    for layout in layouts:
+        for placement in layout.placements:
+            assert layout.x <= placement.x <= layout.x + layout.width - placement.width
+            assert layout.y <= placement.y <= layout.y + layout.height - placement.height
+
+
 def test_landscape_layout_uses_wide_page_size():
     page_size, layouts = place_badges(
         badge_ids=["alpha"],

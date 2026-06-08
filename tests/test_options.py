@@ -15,6 +15,8 @@ def test_parse_layout_options_accepts_valid_values():
         "unit": "in",
         "badge_size": "2.0",
         "spacing": "0.6",
+        "page_margin": "0.75",
+        "panel_gap": "1.25",
         "copies": "3",
         "include_logo": "on",
         "logo_size": "3.0",
@@ -38,10 +40,14 @@ def test_parse_layout_options_accepts_valid_values():
         unit="in",
         badge_size="2.0",
         spacing="0.6",
+        page_margin="0.75",
+        panel_gap="1.25",
         include_logo=True,
         logo_size="3.0",
         badge_size_inches=2.0,
         spacing_inches=0.6,
+        page_margin_inches=0.75,
+        panel_gap_inches=1.25,
         logo_size_inches=3.0,
         copies=3,
         order="category",
@@ -66,6 +72,8 @@ def test_parse_layout_options_normalizes_invalid_values():
         "unit": "meters",
         "badge_size": "huge",
         "spacing": "-4",
+        "page_margin": "99",
+        "panel_gap": "-2",
         "copies": "999",
         "include_logo": "maybe",
         "logo_size": "100",
@@ -90,10 +98,14 @@ def test_parse_layout_options_normalizes_invalid_values():
         unit="cm",
         badge_size="3.5",
         spacing="0.5",
+        page_margin="5",
+        panel_gap="0",
         include_logo=False,
         logo_size="5.0",
         badge_size_inches=approx(3.5 / 2.54),
         spacing_inches=approx(0.5 / 2.54),
+        page_margin_inches=approx(5.0 / 2.54),
+        panel_gap_inches=0.0,
         logo_size_inches=approx(5.0 / 2.54),
         copies=24,
         order="selected",
@@ -116,6 +128,8 @@ def test_parse_layout_options_defaults_to_both_sides_and_mirror_when_none_are_va
     assert options.page_size == "a4"
     assert options.unit == "cm"
     assert options.mirror is True
+    assert options.page_margin == "1.25"
+    assert options.panel_gap == "0.85"
 
 
 def test_parse_layout_options_accepts_m_pixel_mode():
@@ -139,12 +153,22 @@ def test_parse_layout_options_accepts_alphabetical_order():
 
 def test_parse_layout_options_converts_centimeters_to_inches():
     options = parse_layout_options(
-        {"unit": "cm", "badge_size": "10.0", "spacing": "2.0", "logo_size": "15.0", "curve_diameter": "12.0"},
+        {
+            "unit": "cm",
+            "badge_size": "10.0",
+            "spacing": "2.0",
+            "page_margin": "2.5",
+            "panel_gap": "3.0",
+            "logo_size": "15.0",
+            "curve_diameter": "12.0",
+        },
         _getlist({"sides": ["front"]}),
     )
 
     assert options.badge_size_inches == approx(10.0 / 2.54)
     assert options.spacing_inches == approx(2.0 / 2.54)
+    assert options.page_margin_inches == approx(2.5 / 2.54)
+    assert options.panel_gap_inches == approx(3.0 / 2.54)
     assert options.logo_size_inches == approx(15.0 / 2.54)
     assert options.curve_diameter_inches == approx(12.0 / 2.54)
 

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass
 from math import ceil, cos, pi, radians, sin, sqrt
 from random import Random
@@ -56,22 +57,29 @@ def expand_badges(badge_ids: list[str], copies: int) -> list[str]:
     return [badge_id for badge_id in badge_ids for _ in range(copies)]
 
 
-def compute_panels(page_width: float, page_height: float, sides: list[str]) -> dict[str, tuple[float, float, float, float]]:
+def compute_panels(
+    page_width: float,
+    page_height: float,
+    sides: list[str],
+    page_margin: float = PANEL_MARGIN,
+    panel_gap: float = 24.0,
+) -> dict[str, tuple[float, float, float, float]]:
     """Return front/back panel rectangles for the selected sides."""
 
     selected = [side for side in ("front", "back") if side in sides]
     if not selected:
         selected = ["front"]
 
-    content_x = PANEL_MARGIN
-    content_y = PANEL_MARGIN
-    content_width = page_width - 2 * PANEL_MARGIN
-    content_height = page_height - 2 * PANEL_MARGIN
+    safe_margin = _clamp(page_margin, 0.0, min(page_width, page_height) / 2 - 1.0)
+    content_x = safe_margin
+    content_y = safe_margin
+    content_width = page_width - 2 * safe_margin
+    content_height = page_height - 2 * safe_margin
 
     if len(selected) == 1:
         return {selected[0]: (content_x, content_y, content_width, content_height)}
 
-    gap = 24.0
+    gap = min(max(0.0, panel_gap), max(0.0, content_width - 2.0))
     panel_width = (content_width - gap) / 2
     return {
         "front": (content_x, content_y, panel_width, content_height),
@@ -79,14 +87,85 @@ def compute_panels(page_width: float, page_height: float, sides: list[str]) -> d
     }
 
 
-def _grid_positions(ids: list[str], panel: tuple[float, float, float, float], badge_size: float, spacing: float) -> list[Placement]:
-    x, y, width, height = panel
-    count = len(ids)
+def _grid_dimensions(
+    count: int,
+    panel: tuple[float, float, float, float],
+    badge_size: float,
+    spacing: float,
+) -> tuple[int, int, int, float, float]:
+    """Return grid columns, rows, visible columns, and occupied size for a spacing value."""
+
+    _, _, width, _ = panel
     cols = max(1, int((width + spacing) // (badge_size + spacing)))
     rows = max(1, ceil(count / cols))
     actual_cols = min(cols, count)
     total_width = actual_cols * badge_size + max(0, actual_cols - 1) * spacing
     total_height = rows * badge_size + max(0, rows - 1) * spacing
+    return cols, rows, actual_cols, total_width, total_height
+
+
+def _grid_fits(count: int, panel: tuple[float, float, float, float], badge_size: float, spacing: float) -> bool:
+    """Return whether grid placement with this spacing fits inside the panel."""
+
+    if count <= 0:
+        return True
+    _, _, width, height = panel
+    _, _, _, total_width, total_height = _grid_dimensions(count, panel, badge_size, spacing)
+    return total_width <= width + 0.01 and total_height <= height + 0.01
+
+
+def _rows_fits(count: int, panel: tuple[float, float, float, float], badge_size: float, spacing: float) -> bool:
+    """Return whether staggered row placement with this spacing fits inside the panel."""
+
+    if count <= 0:
+        return True
+    _, _, width, height = panel
+    cols, rows, _, _, total_height = _grid_dimensions(count, panel, badge_size, spacing)
+    for row in range(rows):
+        row_count = min(cols, count - row * cols)
+        offset = spacing * 0.5 if row % 2 else 0.0
+        total_width = row_count * badge_size + max(0, row_count - 1) * spacing + offset
+        if total_width > width + 0.01:
+            return False
+    return total_height <= height + 0.01
+
+
+def _density_aware_spacing(
+    ids: list[str],
+    panel: tuple[float, float, float, float],
+    badge_size: float,
+    spacing: float,
+    fits: Callable[[int, tuple[float, float, float, float], float, float], bool],
+) -> float:
+    """Shrink spacing just enough for dense grid-like layouts to fit a panel."""
+
+    if not ids or spacing <= 0 or fits(len(ids), panel, badge_size, spacing):
+        return spacing
+    if not fits(len(ids), panel, badge_size, 0.0):
+        return 0.0
+
+    low = 0.0
+    high = spacing
+    for _ in range(32):
+        candidate = (low + high) / 2
+        if fits(len(ids), panel, badge_size, candidate):
+            low = candidate
+        else:
+            high = candidate
+    return low
+
+
+def _grid_positions(
+    ids: list[str],
+    panel: tuple[float, float, float, float],
+    badge_size: float,
+    spacing: float,
+) -> list[Placement]:
+    x, y, width, height = panel
+    count = len(ids)
+    cols, rows, actual_cols, total_width, total_height = _grid_dimensions(
+        count, panel, badge_size, spacing
+    )
     start_x = x + max(0, (width - total_width) / 2)
     start_y = y + height - max(0, (height - total_height) / 2) - badge_size
 
@@ -105,7 +184,12 @@ def _grid_positions(ids: list[str], panel: tuple[float, float, float, float], ba
     return placements
 
 
-def _rows_positions(ids: list[str], panel: tuple[float, float, float, float], badge_size: float, spacing: float) -> list[Placement]:
+def _rows_positions(
+    ids: list[str],
+    panel: tuple[float, float, float, float],
+    badge_size: float,
+    spacing: float,
+) -> list[Placement]:
     x, y, width, height = panel
     cols = max(1, int((width + spacing) // (badge_size + spacing)))
     rows = max(1, ceil(len(ids) / cols))
@@ -118,8 +202,15 @@ def _rows_positions(ids: list[str], panel: tuple[float, float, float, float], ba
         total_width = row_count * badge_size + max(0, row_count - 1) * spacing + offset
         start_x = x + max(0, (width - total_width) / 2) + offset
         placement_y = y + height - (row + 1) * row_gap + (row_gap - badge_size) / 2
+        placement_x = start_x + col * (badge_size + spacing)
         placements.append(
-            Placement(badge_id, start_x + col * (badge_size + spacing), placement_y, badge_size, badge_size)
+            Placement(
+                badge_id,
+                _clamp(placement_x, x, x + width - badge_size),
+                _clamp(placement_y, y, y + height - badge_size),
+                badge_size,
+                badge_size,
+            )
         )
     return placements
 
@@ -408,6 +499,8 @@ def place_badges(
     orientation: str = "portrait",
     badge_size_inches: float = 1.35,
     spacing_inches: float = 0.18,
+    page_margin_inches: float = 0.5,
+    panel_gap_inches: float = 24.0 / POINTS_PER_INCH,
     copies: int = 1,
 ) -> tuple[tuple[float, float], list[PanelLayout]]:
     """Compute printable panel layouts for selected badges."""
@@ -415,8 +508,10 @@ def place_badges(
     page_width, page_height = page_size_points(page_size, orientation)
     badge_size = max(0.35, min(badge_size_inches, 4.0)) * POINTS_PER_INCH
     spacing = max(0.0, min(spacing_inches, 2.0)) * POINTS_PER_INCH
+    page_margin = max(0.0, min(page_margin_inches, 2.0)) * POINTS_PER_INCH
+    panel_gap = max(0.0, min(panel_gap_inches, 4.0)) * POINTS_PER_INCH
     expanded_ids = expand_badges(badge_ids, copies)
-    panels = compute_panels(page_width, page_height, sides)
+    panels = compute_panels(page_width, page_height, sides, page_margin, panel_gap)
     placers = {
         "grid": _grid_positions,
         "rows": _rows_positions,
@@ -430,8 +525,21 @@ def place_badges(
     }
     placer = placers.get(mode, _grid_positions)
 
-    layouts = [
-        PanelLayout(side, *panel, placer(expanded_ids, panel, badge_size, spacing))
-        for side, panel in panels.items()
-    ]
+    layouts = []
+    density_fitters = {"grid": _grid_fits, "rows": _rows_fits}
+    for side, panel in panels.items():
+        panel_spacing = (
+            _density_aware_spacing(
+                expanded_ids,
+                panel,
+                badge_size,
+                spacing,
+                density_fitters[mode],
+            )
+            if mode in density_fitters
+            else spacing
+        )
+        layouts.append(
+            PanelLayout(side, *panel, placer(expanded_ids, panel, badge_size, panel_spacing))
+        )
     return (page_width, page_height), layouts

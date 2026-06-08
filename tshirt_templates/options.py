@@ -22,6 +22,8 @@ DEFAULT_PAGE_SIZE = "a4"
 DEFAULT_UNIT = "cm"
 DEFAULT_BADGE_AMOUNTS = {"cm": "3.5", "in": "1.4"}
 DEFAULT_SPACING_AMOUNTS = {"cm": "0.5", "in": "0.2"}
+DEFAULT_PAGE_MARGIN_AMOUNTS = {"cm": "1.25", "in": "0.5"}
+DEFAULT_PANEL_GAP_AMOUNTS = {"cm": "0.85", "in": "0.33"}
 DEFAULT_LOGO_AMOUNTS = {"cm": "5.0", "in": "2.0"}
 DEFAULT_CURVE_DEVICE = "custom"
 DEFAULT_CURVE_DIAMETER_AMOUNTS = {"cm": "8.0", "in": "3.15"}
@@ -88,10 +90,14 @@ class LayoutOptions:
     unit: str = DEFAULT_UNIT
     badge_size: str = DEFAULT_BADGE_AMOUNTS[DEFAULT_UNIT]
     spacing: str = DEFAULT_SPACING_AMOUNTS[DEFAULT_UNIT]
+    page_margin: str = DEFAULT_PAGE_MARGIN_AMOUNTS[DEFAULT_UNIT]
+    panel_gap: str = DEFAULT_PANEL_GAP_AMOUNTS[DEFAULT_UNIT]
     include_logo: bool = False
     logo_size: str = DEFAULT_LOGO_AMOUNTS[DEFAULT_UNIT]
     badge_size_inches: float = 3.5 / CENTIMETERS_PER_INCH
     spacing_inches: float = 0.5 / CENTIMETERS_PER_INCH
+    page_margin_inches: float = 1.25 / CENTIMETERS_PER_INCH
+    panel_gap_inches: float = 0.85 / CENTIMETERS_PER_INCH
     logo_size_inches: float = 5.0 / CENTIMETERS_PER_INCH
     copies: int = 1
     order: str = "selected"
@@ -185,6 +191,18 @@ def parse_layout_options(
     logo_size = _valid_unit_amount(
         values.get("logo_size"), LOGO_AMOUNTS, DEFAULT_LOGO_AMOUNTS, unit
     )
+    page_margin = _safe_positive_amount(
+        values.get("page_margin"),
+        DEFAULT_PAGE_MARGIN_AMOUNTS[unit],
+        0.0,
+        5.0 if unit == "cm" else 2.0,
+    )
+    panel_gap = _safe_positive_amount(
+        values.get("panel_gap"),
+        DEFAULT_PANEL_GAP_AMOUNTS[unit],
+        0.0,
+        10.0 if unit == "cm" else 4.0,
+    )
     curve_device = _valid_choice(values.get("curve_device"), VALID_CURVE_DEVICES, DEFAULT_CURVE_DEVICE)
     curve_diameter_default = CURVE_DEVICE_DIAMETERS[curve_device][unit]
     curve_diameter = _safe_positive_amount(
@@ -202,10 +220,14 @@ def parse_layout_options(
         unit=unit,
         badge_size=badge_size,
         spacing=spacing,
+        page_margin=page_margin,
+        panel_gap=panel_gap,
         include_logo=_truthy(values.get("include_logo")),
         logo_size=logo_size,
         badge_size_inches=_unit_amount_inches(badge_size, unit),
         spacing_inches=_unit_amount_inches(spacing, unit),
+        page_margin_inches=_unit_amount_inches(page_margin, unit),
+        panel_gap_inches=_unit_amount_inches(panel_gap, unit),
         logo_size_inches=_unit_amount_inches(logo_size, unit),
         copies=_safe_int(values.get("copies"), 1, 1, 24),
         order=_valid_choice(values.get("order"), VALID_ORDER_MODES, "selected"),
