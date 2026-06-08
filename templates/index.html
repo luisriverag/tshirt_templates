@@ -8,12 +8,18 @@
   </head>
   <body>
     <main class="shell">
+      <div class="top-actions">
+        <a class="button-link secondary-button" href="/calibration.pdf">Download calibration page</a>
+        <form class="refresh-form" method="post" action="/refresh">
+          <button type="submit" class="secondary-button">Refresh badges from GitHub</button>
+        </form>
+      </div>
       <section class="hero">
         <div class="brand-lockup">
           <img class="brand-mark" src="https://raw.githubusercontent.com/makespacemadrid/makespacemadrid.github.io/main/assets/images/logo/makespace-bk.svg" alt="MakeSpace Madrid logo">
           <p class="eyebrow hero-tagline">AutoPlot badges into t-shirts &amp; mugs</p>
         </div>
-        <p>Select badges, choose a print-safe placement mode, tune the sheet by hand, then download a mirrored PDF for transfer.</p>
+        <p>Select badges, choose a print-safe placement mode, tune the sheet by hand, then download a mirrored PDF.</p>
         <div class="quick-start" aria-label="Template workflow">
           <div class="step-card"><strong>1. Pick</strong>Choose badges, logo, panels, and units.</div>
           <div class="step-card"><strong>2. Arrange</strong>Preview automatic layouts or drag elements.</div>
@@ -21,34 +27,7 @@
         </div>
       </section>
 
-      <div class="top-actions">
-        <a class="button-link secondary-button" href="/calibration.pdf">Download calibration page</a>
-        <form class="refresh-form" method="post" action="/refresh">
-          <button type="submit" class="secondary-button">Refresh badges from GitHub</button>
-        </form>
-      </div>
 
-
-      <section class="panel onboarding-guide" aria-labelledby="onboarding-title">
-        <div class="section-heading">
-          <h2 id="onboarding-title">Quick print guide</h2>
-          <span>Before you preview</span>
-        </div>
-        <div class="guide-cards">
-          <article>
-            <strong>Mirror transfers</strong>
-            <p>Keep mirroring enabled for sublimation transfer paper unless you are making a proof or calibration print.</p>
-          </article>
-          <article>
-            <strong>Leave cut spacing</strong>
-            <p>Use spacing and optional cut lines so badges remain easy to trim without clipping artwork.</p>
-          </article>
-          <article>
-            <strong>Measure curves</strong>
-            <p>For mugs or canteens, measure the outside diameter of the blank or heater insert and test the wrap with scrap paper.</p>
-          </article>
-        </div>
-      </section>
 
       {% if upload_messages %}
         <section class="panel alert-list" role="status" aria-live="polite">
@@ -146,6 +125,8 @@
                   <input type="number" name="panel_gap" id="panel-gap-input" min="0" max="10" step="0.01" value="{{ default_panel_gap_amounts[default_unit] }}">
                   <small>Space between front/back panels in <span class="dynamic-unit">{{ default_unit }}</span>.</small>
                 </label>
+              </div>
+              <div class="control-grid" style="margin-top:12px">
                 <label>Front text
                   <input type="text" name="front_text" maxlength="64" placeholder="e.g. Ada" aria-describedby="front-text-help">
                   <small id="front-text-help">Optional name or short label printed on the front panel.</small>
@@ -161,6 +142,8 @@
                     {% endfor %}
                   </select>
                 </label>
+              </div>
+              <div class="control-grid" style="margin-top:12px">
                 <label>Logo size
                   <select name="logo_size" id="logo-size-select">
                     {% for amount in logo_size_options[default_unit] %}
