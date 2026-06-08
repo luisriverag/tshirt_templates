@@ -92,6 +92,8 @@ Design goals:
   "unit": "cm",
   "badge_size": "3.5",
   "spacing": "0.5",
+  "page_margin": "1.25",
+  "panel_gap": "0.85",
   "include_logo": false,
   "logo_size": "5.0",
   "copies": 1,
@@ -290,6 +292,8 @@ Request:
     "unit": "cm",
     "badge_size": "3.5",
     "spacing": "0.5",
+    "page_margin": "1.25",
+    "panel_gap": "0.85",
     "include_logo": false,
     "logo_size": "5.0",
     "copies": 1,
@@ -306,7 +310,7 @@ Request:
 }
 ```
 
-`front_text` and `back_text` are optional short labels rendered on the matching panel. `text_font` accepts the values returned by `/api/v1/options` and defaults to `ubuntu`. `include_curve_effect` adds a cylindrical mug/canteen adapter effect in generated PDFs. `curve_device` may be `custom`, `mug`, `skinny-tumbler`, or `canteen`; `/api/v1/options` returns both `curve_device_options` labels and `curve_device_diameters` preset values. Presets provide a starting diameter, and `curve_diameter` may override it with the exact outside device/heater-adapter diameter in the selected `unit`.
+`page_margin` controls the outer content inset, and `panel_gap` controls the space between front/back panels when both are selected. Both use the selected `unit`. `front_text` and `back_text` are optional short labels rendered on the matching panel. `text_font` accepts the values returned by `/api/v1/options` and defaults to `ubuntu`. `include_curve_effect` adds a cylindrical mug/canteen adapter effect in generated PDFs. `curve_device` may be `custom`, `mug`, `skinny-tumbler`, or `canteen`; `/api/v1/options` returns both `curve_device_options` labels and `curve_device_diameters` preset values. Presets provide a starting diameter, and `curve_diameter` may override it with the exact outside device/heater-adapter diameter in the selected `unit`.
 
 Manual placements are optional. Items are addressed by `layout_index` and `placement_index`, with `x`/`y` supplied in the selected unit from the preview top-left coordinate space.
 
@@ -340,6 +344,8 @@ Request:
     "unit": "cm",
     "badge_size": "3.5",
     "spacing": "0.5",
+    "page_margin": "1.25",
+    "panel_gap": "0.85",
     "include_logo": false,
     "logo_size": "5.0",
     "copies": 1,

@@ -115,14 +115,14 @@ Both portrait and landscape orientations are supported. Landscape swaps the long
 
 ### Panels
 
-Users may select front, back, or both panels. If both panels are selected, the content area is split into two side-by-side panel rectangles with a fixed gap. If no valid side is submitted, the application defaults to both front and back at option-parse time.
+Users may select front, back, or both panels. If both panels are selected, the content area is split into two side-by-side panel rectangles. If no valid side is submitted, the application defaults to both front and back at option-parse time. Page-margin and panel-gap controls let users tune the outer content inset and the space between front/back panels in the selected unit.
 
 ### Placement Modes
 
 | Mode | Behavior |
 | --- | --- |
-| `grid` | Centered rows and columns. |
-| `rows` | Staggered rows with alternating horizontal offsets. |
+| `grid` | Centered rows and columns, with spacing reduced automatically when needed to keep dense selections inside the panel. |
+| `rows` | Staggered rows with alternating horizontal offsets, with spacing reduced automatically when needed to keep dense selections inside the panel. |
 | `diagonal` | Badges placed along a diagonal sash. |
 | `scatter` | Deterministic pseudo-random positions and rotations. |
 | `circle` | Badges arranged around an oval wreath. |
@@ -157,7 +157,7 @@ Copies per badge are expanded before placement. Valid values are 1 through 24. T
 
 ### Manual Placement
 
-The preview screen exposes a coordinate/rotation table, draggable SVG elements, keyboard nudging, zoom controls, snap-to-grid placement, snap-to-panel-edge placement with configurable edge tolerance, rotation presets, collision highlights for overlapping badges, and a reset button that restores automatic placement values. Manual fields use this naming convention:
+The preview screen exposes a coordinate/rotation table, draggable SVG elements, multi-select group movement, keyboard nudging, zoom controls, snap-to-grid placement, snap-to-panel-edge placement with configurable edge tolerance, per-panel alignment/distribution tools, rotation presets, collision highlights for overlapping badges, and a reset button that restores automatic placement values. Manual fields use this naming convention:
 
 ```text
 manual_{layout_index}_{placement_index}_x
@@ -169,6 +169,8 @@ manual_{layout_index}_{placement_index}_rotation
 - `rotation` is degrees clockwise as displayed in the preview form.
 - Missing manual fields leave the automatic placement unchanged.
 - Invalid numeric values fall back to the automatic placement value.
+- Ctrl/Shift-clicking preview badges toggles multi-select group movement. Dragging or keyboard-nudging a selected badge moves all selected badges together while preserving their offsets.
+- Alignment buttons move selected badges when there is an active selection; otherwise, they move all badges in each panel. Buttons align badges to the left, right, top, bottom, horizontal center, or vertical center of each panel. Distribution buttons space badges evenly within each panel while preserving current sort order and rotation values.
 
 ## PDF Rendering
 

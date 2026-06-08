@@ -49,6 +49,9 @@ def test_index_renders_badge_picker(monkeypatch):
     assert b'<option value="a4" selected>A4</option>' in response.data
     assert b"Units" in response.data
     assert b"Centimeters" in response.data
+    assert b"Page margin" in response.data
+    assert b"Panel gap" in response.data
+    assert b"page-margin-input" in response.data
     assert b"Only common print-cut sizes" in response.data
     assert b"Include MakeSpace logo" in response.data
     assert b"Logo size" in response.data
@@ -166,6 +169,8 @@ def test_preview_renders_selected_layout(monkeypatch):
             "unit": "in",
             "badge_size": "1.2",
             "spacing": "0.2",
+            "page_margin": "0.4",
+            "panel_gap": "0.3",
             "copies": "2",
             "front_text": "Ada",
             "back_text": "MakeSpace",
@@ -186,7 +191,15 @@ def test_preview_renders_selected_layout(monkeypatch):
     assert b'class="brand-mark"' in response.data
     assert b'viewBox="0 0 792.0 612.0"' in response.data
     assert b'name="orientation" value="landscape"' in response.data
+    assert b'name="page_margin" value="0.4"' in response.data
+    assert b'name="panel_gap" value="0.3"' in response.data
     assert b"Manual placement" in response.data
+    assert b"Ctrl/Shift-click badges to multi-select" in response.data
+    assert b'data-selected="false"' in response.data
+    assert b'aria-pressed="false"' in response.data
+    assert b"selection-outline" in response.data
+    assert b"selectedBadges" in response.data
+    assert b"movableBadgesFor" in response.data
     assert b"Reset automatic placement" in response.data
     assert b"Snap to grid" in response.data
     assert b"Snap to panel edges" in response.data
@@ -194,6 +207,10 @@ def test_preview_renders_selected_layout(monkeypatch):
     assert b"data-panel-x" in response.data
     assert b"snapBadgeToPanelEdges" in response.data
     assert b"Rotate 45" in response.data
+    assert b"Align left" in response.data
+    assert b"Center horizontally" in response.data
+    assert b"Distribute vertically" in response.data
+    assert b"applyPanelAlignment" in response.data
     assert b"preview-status" in response.data
     assert b'class="draggable-badge"' in response.data
     assert b'class="collision-outline"' in response.data
@@ -445,6 +462,8 @@ def test_api_health_options_and_badges(monkeypatch):
     assert options.json["defaults"]["text_font"] == "ubuntu"
     assert options.json["defaults"]["curve_device"] == "custom"
     assert options.json["defaults"]["curve_diameter"] == "8.0"
+    assert options.json["defaults"]["page_margin"] == "1.25"
+    assert options.json["defaults"]["panel_gap"] == "0.85"
     assert options.json["text_fonts"]["ubuntu"] == "Ubuntu"
     assert options.json["curve_device_options"]["mug"] == "Standard mug"
     assert options.json["curve_device_diameters"]["mug"]["cm"] == "8.2"
@@ -776,6 +795,7 @@ def test_mcp_metadata_resources_prompts_and_tools(monkeypatch):
     options_resource = read_options.json["result"]["contents"][0]
     assert options_resource["mimeType"] == "application/json"
     assert json.loads(options_resource["text"])["defaults"]["text_font"] == "ubuntu"
+    assert json.loads(options_resource["text"])["defaults"]["page_margin"] == "1.25"
     assert read_badges.status_code == 200
     badges_resource = read_badges.json["result"]["contents"][0]
     assert json.loads(badges_resource["text"])["badges"][0]["id"] == DEMO_BADGE.id

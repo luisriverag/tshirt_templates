@@ -97,6 +97,7 @@ button:hover { transform: translate(-2px, -2px); box-shadow: 6px 6px 0 var(--sec
 .secondary-button { background: var(--surface-color); color: var(--primary-color); border-color: var(--primary-color); }
 .back-link { display: inline-block; margin-bottom: 18px; color: var(--secondary-color); background: var(--primary-color); border: 2px solid var(--secondary-color); border-radius: var(--border-radius); padding: 8px 12px; font-weight: 900; text-decoration: none; box-shadow: 4px 4px 0 var(--secondary-color); }
 .preview-tools, .manual-tools { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; margin-top: 18px; }
+.alignment-tools { padding-top: 12px; border-top: 1px solid var(--line-color); }
 .preview-tools input[type="number"] { width: 5rem; }
 .preview-wrap { margin-top: 24px; background: var(--surface-muted); border: 2px solid var(--primary-color); border-radius: var(--border-radius); padding: 24px; overflow: auto; box-shadow: 8px 8px 0 var(--secondary-color); }
 .page-preview { display: block; max-width: 100%; margin: auto; background: #fff; box-shadow: 0 12px 36px rgba(0,0,0,.38); }
@@ -104,7 +105,10 @@ button:hover { transform: translate(-2px, -2px); box-shadow: 6px 6px 0 var(--sec
 .page-preview.high-contrast .panel-outline { stroke: #000; stroke-dasharray: none; stroke-width: 4; }
 .cut-line-outline { fill: none; stroke: #111; stroke-width: 1.2; stroke-dasharray: 5 4; pointer-events: none; }
 .badge-contrast-outline { display: none; fill: none; stroke: #000; stroke-width: 4; pointer-events: none; }
+.selection-outline { display: none; fill: rgba(255, 255, 0, .16); stroke: #111; stroke-width: 2; stroke-dasharray: 7 4; pointer-events: none; }
+.draggable-badge.selected-badge .selection-outline { display: block; }
 .page-preview.high-contrast .badge-contrast-outline { display: block; }
+.page-preview.high-contrast .selection-outline { stroke: #000; stroke-width: 5; }
 .page-preview.high-contrast .draggable-badge:focus .badge-transform,
 .page-preview.high-contrast .draggable-badge.dragging .badge-transform { filter: drop-shadow(0 0 4px #000) drop-shadow(0 0 8px #ffff00); }
 .panel-title { font: 700 13px "Courier New", monospace; fill: #333; }
@@ -113,7 +117,8 @@ button:hover { transform: translate(-2px, -2px); box-shadow: 6px 6px 0 var(--sec
 .sticky-actions { margin-top: 18px; }
 .draggable-badge { cursor: grab; outline: none; }
 .draggable-badge:focus .badge-transform,
-.draggable-badge.dragging .badge-transform { filter: drop-shadow(0 0 8px rgba(255, 255, 0, .95)); }
+.draggable-badge.dragging .badge-transform,
+.draggable-badge.selected-badge .badge-transform { filter: drop-shadow(0 0 8px rgba(255, 255, 0, .95)); }
 .draggable-badge.dragging { cursor: grabbing; }
 .collision-outline { display: none; fill: rgba(204, 58, 58, .12); stroke: #cc3a3a; stroke-width: 3; stroke-dasharray: 6 4; pointer-events: none; }
 .draggable-badge.collision .collision-outline { display: block; }

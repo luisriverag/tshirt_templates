@@ -18,13 +18,13 @@ The app discovers badge image assets from the GitHub repository, lets you select
   - **Wave ribbon**: badges following a horizontal sine-wave band.
   - **Border**: perimeter frame layout for collar/sleeve-style badge accents.
   - **M pixel shape**: pixel-art capital M that repeats the selected badges as mosaic pixels.
-- Configurable page size (A4 by default), page orientation, centimeter/inch units, badge size presets, spacing presets, copies per badge, mirroring, and panel selection, with invalid form values safely normalized and grouped into step-by-step controls plus a quick print guide.
+- Configurable page size (A4 by default), page orientation, centimeter/inch units, page margin/panel gap controls, badge size presets, spacing presets with density-aware automatic shrinking for crowded grid/row layouts, copies per badge, mirroring, and panel selection, with invalid form values safely normalized and grouped into step-by-step controls plus a quick print guide.
 - Optional front/back panel text for names or short labels, with Ubuntu as the default font plus Helvetica, Times, Courier, and DejaVu Sans choices.
 - User uploads for additional SVG/PNG/JPG badge artwork stored under the Flask `instance/uploads/` folder, with browser and API replacement/deletion for saved uploads and validation notices for questionable image dimensions or invalid artwork.
 - Optional mirroring for sublimation transfer workflows plus badge cut-line outlines, crop/registration print marks, a mug/canteen curved-adapter effect with device presets and configurable diameter, and a calibration page with rulers/mirror warnings for alignment.
 - Optional MakeSpace Madrid logo element with configurable size.
 - Badge picker cards are selected by default, searchable/filterable by category, bulk selectable with live selected/visible counts, and drag-and-droppable before previewing to customize selection-order layouts.
-- MakeSpace-inspired black/yellow monospace UI theme plus browser preview with manual drag/coordinate placement adjustments, reset controls, zoom, snap-to-grid, snap-to-panel-edge controls, keyboard nudging, rotation presets, overlap warnings, and PDF download.
+- MakeSpace-inspired black/yellow monospace UI theme plus browser preview with manual drag/coordinate placement adjustments, multi-select group movement, reset controls, zoom, snap-to-grid, snap-to-panel-edge controls, keyboard nudging, panel alignment/distribution tools, rotation presets, overlap warnings, and PDF download.
 - JSON API endpoints for health/options/badges, API uploads, layout previews, saved template files, and direct PDF generation, plus MCP-compatible tools/resources/prompts and a CLI for agent-driven or repeatable local PDF workflows.
 
 ## Quick start
