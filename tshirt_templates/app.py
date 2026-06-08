@@ -1156,6 +1156,7 @@ def create_app() -> Flask:
                         "badge_ids": {"type": "array", "items": {"type": "string"}},
                         "options": {"type": "object"},
                         "manual_placements": {"type": "array", "items": {"type": "object"}},
+                        "allow_partial": {"type": "boolean"},
                     },
                 },
             },
@@ -1248,6 +1249,36 @@ def create_app() -> Flask:
 
     def _mcp_render_pdf(arguments: dict) -> dict:
         options, render_badges, page_size, layouts = _json_layout_parts(arguments)
+        requested_ids = [str(badge_id) for badge_id in arguments.get("badge_ids", []) if str(badge_id)]
+        render_badge_ids = [badge.id for badge in render_badges]
+        resolved_ids = set(render_badge_ids)
+        missing_ids = [badge_id for badge_id in requested_ids if badge_id not in resolved_ids]
+        placement_count = sum(len(layout.placements) for layout in layouts)
+        warnings = []
+        if missing_ids:
+            warnings.append(
+                {
+                    "code": "unknown_badges",
+                    "message": "Some requested badge IDs were not found and would be omitted from the PDF.",
+                    "badge_ids": missing_ids,
+                }
+            )
+        if placement_count == 0:
+            warnings.append(
+                {
+                    "code": "empty_layout",
+                    "message": "The render request produced no badge placements.",
+                }
+            )
+        allow_partial = bool(arguments.get("allow_partial"))
+        if warnings and not allow_partial:
+            return {
+                "error": {
+                    "code": "render_preflight_failed",
+                    "message": "MCP PDF render preflight failed; fix the warnings or set allow_partial=true to render anyway.",
+                    "failures": warnings,
+                }
+            }
         asset_failures = _pdf_asset_failures(render_badges)
         if asset_failures:
             return {
@@ -1276,6 +1307,15 @@ def create_app() -> Flask:
             "filename": "tshirt-badge-template.pdf",
             "pdf_base64": encoded,
             "byte_length": len(content),
+            "warnings": warnings,
+            "diagnostics": {
+                "requested_badge_ids": requested_ids,
+                "render_badge_ids": render_badge_ids,
+                "missing_badge_ids": missing_ids,
+                "layout_count": len(layouts),
+                "placement_count": placement_count,
+                "allow_partial": allow_partial,
+            },
             "resource": {
                 "uri": "tshirt://generated/tshirt-badge-template.pdf",
                 "mimeType": "application/pdf",

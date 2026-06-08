@@ -93,6 +93,34 @@ def test_render_pdf_smoke_checks_page_size_and_placement_count(monkeypatch):
     assert len(drawn) == 2
 
 
+def test_render_pdf_fetches_each_badge_asset_once_for_repeated_placements(monkeypatch):
+    badge = Badge(
+        id="demo-badge.svg",
+        name="Demo Badge",
+        path="demo-badge.svg",
+        raw_url="/static/demo-badge.svg",
+        extension=".svg",
+    )
+    layout = PanelLayout(
+        "front",
+        20.0,
+        20.0,
+        160.0,
+        160.0,
+        [
+            Placement(badge.id, 40.0, 45.0, 30.0, 30.0),
+            Placement(badge.id, 80.0, 90.0, 30.0, 30.0),
+        ],
+    )
+    fetches = []
+    monkeypatch.setattr(pdf_module, "_fetch_asset", lambda fetched_badge: fetches.append(fetched_badge.id) or pdf_module.DEMO_SVG)
+
+    content = render_pdf([badge], (200.0, 300.0), [layout], mirror=False)
+
+    assert content.startswith(b"%PDF")
+    assert fetches == [badge.id]
+
+
 def test_curved_placement_rotates_and_sags_from_panel_center():
     layout = PanelLayout("front", 0.0, 0.0, 200.0, 120.0, [])
 

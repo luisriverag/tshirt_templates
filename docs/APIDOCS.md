@@ -564,11 +564,14 @@ Inputs:
 {
   "badge_ids": [],
   "options": {},
-  "manual_placements": []
+  "manual_placements": [],
+  "allow_partial": false
 }
 ```
 
-Outputs `mime_type`, `filename`, `byte_length`, base64-encoded PDF bytes in `pdf_base64`, and a `resource` object with `uri`, `mimeType`, and `blob`. The tool result also includes text and resource content items for clients that prefer MCP content blocks.
+Before rendering, MCP checks that every requested badge ID resolved to a renderable placement. By default it returns `render_preflight_failed` instead of delivering a partial PDF when badge IDs are unknown or the layout is empty; set `allow_partial` to `true` to receive a PDF with `warnings` and `diagnostics` describing omitted IDs, layout counts, and placement counts.
+
+Outputs `mime_type`, `filename`, `byte_length`, base64-encoded PDF bytes in `pdf_base64`, `warnings`, `diagnostics`, and a `resource` object with `uri`, `mimeType`, and `blob`. The tool result also includes text and resource content items for clients that prefer MCP content blocks.
 
 #### `upload_badge_artwork`
 

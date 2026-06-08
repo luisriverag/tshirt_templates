@@ -28,7 +28,8 @@ def test_index_renders_badge_picker(monkeypatch):
     response = app.test_client().get("/")
 
     assert response.status_code == 200
-    assert b"Generate front & back t-shirt badge PDF templates" in response.data
+    assert b"AutoPlot badges into t-shirts &amp; mugs" in response.data
+    assert b"Generate front & back t-shirt badge PDF templates" not in response.data
     assert b'class="brand-mark"' in response.data
     assert b"Template workflow" in response.data
     assert b"1. Page and layout" in response.data
@@ -947,6 +948,10 @@ def test_mcp_render_pdf_upload_and_validate_template(monkeypatch, tmp_path):
     assert pdf.status_code == 200
     pdf_payload = pdf.json["result"]["structuredContent"]
     assert pdf_payload["mime_type"] == "application/pdf"
+    assert pdf_payload["warnings"] == []
+    assert pdf_payload["diagnostics"]["requested_badge_ids"] == [DEMO_BADGE.id]
+    assert pdf_payload["diagnostics"]["missing_badge_ids"] == []
+    assert pdf_payload["diagnostics"]["placement_count"] > 0
     assert pdf_payload["resource"]["mimeType"] == "application/pdf"
     assert base64.b64decode(pdf_payload["pdf_base64"]).startswith(b"%PDF")
     pdf_content = pdf.json["result"]["content"]
@@ -959,6 +964,76 @@ def test_mcp_render_pdf_upload_and_validate_template(monkeypatch, tmp_path):
     assert validation_payload["normalized"]["options"]["sides"] == ["front"]
     assert validation_payload["warnings"][0]["code"] == "unknown_badges"
 
+
+
+def test_mcp_render_pdf_rejects_missing_badges_before_delivering_partial_pdf(monkeypatch):
+    calls = []
+    monkeypatch.setattr("tshirt_templates.app.list_badges", lambda: [DEMO_BADGE])
+    monkeypatch.setattr("tshirt_templates.badges.list_badges", lambda: [DEMO_BADGE])
+    monkeypatch.setitem(
+        sys.modules,
+        "tshirt_templates.pdf",
+        SimpleNamespace(render_pdf=lambda *args, **kwargs: calls.append((args, kwargs)) or b"%PDF"),
+    )
+    app = create_app()
+
+    response = app.test_client().post(
+        "/mcp",
+        json={
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "tools/call",
+            "params": {
+                "name": "render_pdf",
+                "arguments": {
+                    "badge_ids": [DEMO_BADGE.id, "missing.svg"],
+                    "options": {"sides": ["front"]},
+                },
+            },
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.json["error"]["code"] == -32602
+    assert response.json["error"]["data"]["code"] == "render_preflight_failed"
+    assert response.json["error"]["data"]["failures"][0]["code"] == "unknown_badges"
+    assert response.json["error"]["data"]["failures"][0]["badge_ids"] == ["missing.svg"]
+    assert calls == []
+
+
+def test_mcp_render_pdf_can_deliver_partial_pdf_with_diagnostics(monkeypatch):
+    monkeypatch.setattr("tshirt_templates.app.list_badges", lambda: [DEMO_BADGE])
+    monkeypatch.setattr("tshirt_templates.badges.list_badges", lambda: [DEMO_BADGE])
+    monkeypatch.setitem(
+        sys.modules,
+        "tshirt_templates.pdf",
+        SimpleNamespace(render_pdf=lambda *args, **kwargs: b"%PDF-1.4\n%%EOF"),
+    )
+    app = create_app()
+
+    response = app.test_client().post(
+        "/mcp",
+        json={
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "tools/call",
+            "params": {
+                "name": "render_pdf",
+                "arguments": {
+                    "badge_ids": [DEMO_BADGE.id, "missing.svg"],
+                    "options": {"sides": ["front"]},
+                    "allow_partial": True,
+                },
+            },
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.json["result"]["structuredContent"]
+    assert base64.b64decode(payload["pdf_base64"]).startswith(b"%PDF")
+    assert payload["warnings"][0]["code"] == "unknown_badges"
+    assert payload["diagnostics"]["missing_badge_ids"] == ["missing.svg"]
+    assert payload["diagnostics"]["allow_partial"] is True
 
 def test_api_ready_reports_not_ready_when_upload_folder_is_file(tmp_path):
     app = create_app()
