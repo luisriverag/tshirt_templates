@@ -353,9 +353,6 @@ def render_pdf(
         pdf.setDash(5, 4)
         pdf.roundRect(layout.x, layout.y, layout.width, layout.height, 12, stroke=1, fill=0)
         pdf.setDash()
-        pdf.setFont("Helvetica-Bold", 12)
-        pdf.setFillColor(colors.HexColor("#333333"))
-        pdf.drawString(layout.x + 10, layout.y + layout.height - 18, layout.side.upper())
 
         _draw_panel_text(pdf, layout, panel_text)
         _draw_curve_guide(pdf, layout, curve_settings)

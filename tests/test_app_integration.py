@@ -53,6 +53,8 @@ def test_index_renders_badge_picker(monkeypatch):
     assert b"Page margin" in response.data
     assert b"Panel gap" in response.data
     assert b"page-margin-input" in response.data
+    assert b'name="page_margin" id="page-margin-input" min="0" max="5" step="0.01"' in response.data
+    assert b'name="panel_gap" id="panel-gap-input" min="0" max="10" step="0.01"' in response.data
     assert b"Only common print-cut sizes" in response.data
     assert b"Include MakeSpace logo" in response.data
     assert b"Logo size" in response.data
@@ -83,6 +85,9 @@ def test_index_renders_badge_picker(monkeypatch):
     assert b"Optional: mug/canteen curved adapter effect" in response.data
     assert b"Adapter math" in response.data
     assert b"Curve diameter" in response.data
+    assert b'name="curve_diameter" id="curve-diameter-input" min="2.5" max="50" step="0.01"' in response.data
+    assert b"normalizeNumberInput" in response.data
+    assert b"curveDiameterInput.min = unit === 'cm' ? '2.5' : '1'" in response.data
     assert b"Demo Badge" in response.data
 
 
@@ -195,6 +200,9 @@ def test_preview_renders_selected_layout(monkeypatch):
     assert b'name="page_margin" value="0.4"' in response.data
     assert b'name="panel_gap" value="0.3"' in response.data
     assert b"Manual placement" in response.data
+    assert b'data-field="x"' in response.data
+    assert b'step="0.01" value="' in response.data
+    assert b"normalizeNumberInput" in response.data
     assert b"Ctrl/Shift-click badges to multi-select" in response.data
     assert b'data-selected="false"' in response.data
     assert b'aria-pressed="false"' in response.data
@@ -297,6 +305,38 @@ def test_pdf_route_passes_panel_text_options(monkeypatch):
     assert response.status_code == 200
     assert calls[0]["panel_text"] == {"front": "Ada", "back": "MakeSpace", "font": "courier"}
 
+
+
+def test_pdf_route_renders_with_placeholder_when_asset_verification_fails(monkeypatch):
+    calls = []
+    monkeypatch.setattr("tshirt_templates.badges.list_badges", lambda: [DEMO_BADGE])
+    monkeypatch.setitem(
+        sys.modules,
+        "tshirt_templates.pdf",
+        SimpleNamespace(
+            verify_pdf_assets=lambda badges: [
+                {"badge_id": badges[0].id, "name": badges[0].name, "message": "broken asset"}
+            ],
+            render_pdf=lambda *args, **kwargs: calls.append((args, kwargs)) or b"%PDF-1.4\n%%EOF",
+        ),
+    )
+    app = create_app()
+
+    response = app.test_client().post(
+        "/pdf",
+        data={"badges": [DEMO_BADGE.id], "sides": ["front"], "mode": "grid"},
+    )
+
+    assert response.status_code == 200
+    assert response.mimetype == "application/pdf"
+    assert response.data.startswith(b"%PDF")
+    assert json.loads(response.headers["X-Badgeware-Warnings"]) == {
+        "asset_failures": [{"badge_id": DEMO_BADGE.id, "name": DEMO_BADGE.name, "message": "broken asset"}]
+    }
+    args, kwargs = calls[0]
+    assert [badge.id for badge in args[0]] == [DEMO_BADGE.id]
+    assert kwargs["metadata"]["asset_failures"] == "1"
+    assert kwargs["metadata"]["allow_partial"] == "true"
 
 def test_refresh_route_clears_cache_and_redirects(monkeypatch):
     called = []
@@ -695,6 +735,38 @@ def test_api_pdf_verifies_assets_before_rendering(monkeypatch):
     assert response.json["error"]["failures"][0]["badge_id"] == DEMO_BADGE.id
     assert render_calls == []
 
+
+def test_api_pdf_can_allow_partial_asset_failures(monkeypatch):
+    calls = []
+    monkeypatch.setattr("tshirt_templates.badges.list_badges", lambda: [DEMO_BADGE])
+    monkeypatch.setitem(
+        sys.modules,
+        "tshirt_templates.pdf",
+        SimpleNamespace(
+            verify_pdf_assets=lambda badges: [
+                {"badge_id": badges[0].id, "name": badges[0].name, "message": "broken asset"}
+            ],
+            render_pdf=lambda *args, **kwargs: calls.append((args, kwargs)) or b"%PDF-1.4\n%%EOF",
+        ),
+    )
+    app = create_app()
+
+    response = app.test_client().post(
+        "/api/v1/pdfs",
+        json={"badge_ids": [DEMO_BADGE.id], "options": {"sides": ["front"]}, "allow_partial": True},
+    )
+
+    assert response.status_code == 200
+    assert response.mimetype == "application/pdf"
+    assert response.data.startswith(b"%PDF")
+    assert json.loads(response.headers["X-Badgeware-Warnings"]) == {
+        "asset_failures": [{"badge_id": DEMO_BADGE.id, "name": DEMO_BADGE.name, "message": "broken asset"}]
+    }
+    args, kwargs = calls[0]
+    assert [badge.id for badge in args[0]] == [DEMO_BADGE.id]
+    assert kwargs["metadata"]["asset_failures"] == "1"
+    assert kwargs["metadata"]["allow_partial"] == "true"
+
 def test_api_pdf_rejects_non_json_payload():
     app = create_app()
 
@@ -884,6 +956,55 @@ def test_mcp_render_pdf_reports_asset_verification_failures(monkeypatch):
     assert response.json["error"]["code"] == -32602
     assert response.json["error"]["data"]["code"] == "asset_verification_failed"
     assert response.json["error"]["data"]["failures"][0]["badge_id"] == DEMO_BADGE.id
+
+
+def test_mcp_render_pdf_can_allow_partial_asset_failures(monkeypatch):
+    calls = []
+    monkeypatch.setattr("tshirt_templates.badges.list_badges", lambda: [DEMO_BADGE])
+    monkeypatch.setitem(
+        sys.modules,
+        "tshirt_templates.pdf",
+        SimpleNamespace(
+            verify_pdf_assets=lambda badges: [
+                {"badge_id": badges[0].id, "name": badges[0].name, "message": "broken asset"}
+            ],
+            render_pdf=lambda *args, **kwargs: calls.append((args, kwargs)) or b"%PDF-1.4\n%%EOF",
+        ),
+    )
+    app = create_app()
+
+    response = app.test_client().post(
+        "/mcp",
+        json={
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "tools/call",
+            "params": {
+                "name": "render_pdf",
+                "arguments": {
+                    "badge_ids": [DEMO_BADGE.id],
+                    "options": {"sides": ["front"]},
+                    "allow_partial": True,
+                },
+            },
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.json["result"]["structuredContent"]
+    assert base64.b64decode(payload["pdf_base64"]).startswith(b"%PDF")
+    assert payload["warnings"] == [
+        {
+            "code": "asset_verification_failed",
+            "message": "One or more badge assets could not be fetched or rendered; placeholders will be drawn for failed assets.",
+            "failures": [{"badge_id": DEMO_BADGE.id, "name": DEMO_BADGE.name, "message": "broken asset"}],
+        }
+    ]
+    args, kwargs = calls[0]
+    assert [badge.id for badge in args[0]] == [DEMO_BADGE.id]
+    assert kwargs["metadata"]["asset_failures"] == "1"
+    assert kwargs["metadata"]["allow_partial"] == "true"
+
 
 def test_mcp_render_pdf_upload_and_validate_template(monkeypatch, tmp_path):
     calls = []

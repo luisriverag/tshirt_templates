@@ -178,7 +178,7 @@ PDF rendering receives the resolved badges, page size, panel layouts, and mirror
 
 1. Creates a ReportLab canvas.
 2. Mirrors the canvas horizontally when requested for sublimation transfer.
-3. Draws dashed panel outlines and panel labels.
+3. Draws dashed panel outlines without automatic header labels or page numbers.
 4. Draws each badge at its placement center with its rotation.
 5. Fetches upstream assets on demand or reads uploaded local files.
 6. Renders SVG assets through svglib and raster assets through ReportLab image handling.
@@ -187,7 +187,7 @@ PDF rendering receives the resolved badges, page size, panel layouts, and mirror
 9. Writes selected layout options into PDF metadata.
 10. Draws an error placeholder if an asset cannot be fetched or rendered.
 
-Before API, MCP, or browser PDF generation starts, the server verifies that every resolved badge asset can be fetched and parsed by the appropriate SVG or raster renderer. Verification failures stop PDF generation and return structured errors for API/MCP callers instead of producing a partial print file.
+Before API, MCP, or browser PDF generation starts, the server verifies that every resolved badge asset can be fetched and parsed by the appropriate SVG or raster renderer. JSON API and MCP requests fail closed by default with structured `asset_verification_failed` errors. API and MCP callers can set `allow_partial=true` to receive a best-effort PDF with placeholders and warnings for failed assets, while browser PDF downloads use the same partial-render behavior automatically so a single broken asset does not block the download.
 
 ## Validation and Defaults
 
@@ -213,7 +213,7 @@ Size and spacing use preset selector values instead of arbitrary numbers. Preset
 
 ### Print Marks and PDF Metadata
 
-Users can download a calibration PDF with centimeter/inch rulers and mirror guidance to verify print scale. Users can also enable optional badge cut-line outlines, crop/registration marks, and mug/canteen curved-adapter output in generated PDFs. The PDF renderer also writes selected layout options into PDF subject/keyword metadata so exported files retain the page, layout, mirror, logo, text-font, cut-line, curve-effect, curve-device, curve-diameter, and print-mark settings used to generate them.
+Users can download a calibration PDF with centimeter/inch rulers and mirror guidance to verify print scale. Users can also enable optional badge cut-line outlines, crop/registration marks, and mug/canteen curved-adapter output in generated PDFs. Template PDFs intentionally omit automatic page headers, panel labels, and page numbers; only explicit front/back text entered by the user is drawn as panel text. The PDF renderer also writes selected layout options into PDF subject/keyword metadata so exported files retain the page, layout, mirror, logo, text-font, cut-line, curve-effect, curve-device, curve-diameter, and print-mark settings used to generate them.
 
 ## API and MCP Serialization
 

@@ -149,8 +149,8 @@
                       <tr>
                         <td>{{ layout.side|title }}</td>
                         <td>{{ badge.name }}</td>
-                        <td><input class="manual-input" data-field="x" data-key="{{ layout_index }}_{{ placement_index }}" type="number" name="manual_{{ layout_index }}_{{ placement_index }}_x" step="0.1" value="{{ '%.2f'|format(placement.x / points_per_unit) }}"></td>
-                        <td><input class="manual-input" data-field="y" data-key="{{ layout_index }}_{{ placement_index }}" type="number" name="manual_{{ layout_index }}_{{ placement_index }}_y" step="0.1" value="{{ '%.2f'|format((page_height - placement.y - placement.height) / points_per_unit) }}"></td>
+                        <td><input class="manual-input" data-field="x" data-key="{{ layout_index }}_{{ placement_index }}" type="number" name="manual_{{ layout_index }}_{{ placement_index }}_x" step="0.01" value="{{ '%.2f'|format(placement.x / points_per_unit) }}"></td>
+                        <td><input class="manual-input" data-field="y" data-key="{{ layout_index }}_{{ placement_index }}" type="number" name="manual_{{ layout_index }}_{{ placement_index }}_y" step="0.01" value="{{ '%.2f'|format((page_height - placement.y - placement.height) / points_per_unit) }}"></td>
                         <td><input class="manual-input" data-field="rotation" data-key="{{ layout_index }}_{{ placement_index }}" type="number" name="manual_{{ layout_index }}_{{ placement_index }}_rotation" step="1" value="{{ '%.1f'|format(placement.rotation) }}"></td>
                       </tr>
                     {% endif %}
@@ -186,12 +186,37 @@
       const inputs = new Map();
       let selectedBadge = null;
       const selectedBadges = new Set();
+      function decimalPlaces(value) {
+        const text = String(value || '1');
+        if (text.includes('e-')) return Number(text.split('e-')[1]);
+        return (text.split('.')[1] || '').length;
+      }
+
+      function normalizeNumberInput(input) {
+        const fallback = Number(input.dataset.initial || input.defaultValue || input.value || 0);
+        let value = Number(input.value);
+        if (!Number.isFinite(value)) value = fallback;
+        if (input.step && input.step !== 'any') {
+          const step = Number(input.step);
+          if (Number.isFinite(step) && step > 0) {
+            value = Math.round(value / step) * step;
+            input.value = value.toFixed(decimalPlaces(input.step)).replace(/\.?0+$/, '');
+            return;
+          }
+        }
+        input.value = String(value);
+      }
+
       document.querySelectorAll('.manual-input').forEach((input) => {
         const key = input.dataset.key;
         if (!inputs.has(key)) inputs.set(key, {});
         inputs.get(key)[input.dataset.field] = input;
         input.dataset.initial = input.value;
         input.addEventListener('input', () => updateBadgeFromInputs(key));
+        input.addEventListener('change', () => {
+          normalizeNumberInput(input);
+          updateBadgeFromInputs(key);
+        });
       });
 
       function snap(value) {
@@ -464,6 +489,10 @@
           const movedCount = movableBadgesFor(badge).length;
           setStatus(`${movedCount} badge${movedCount === 1 ? '' : 's'} nudged with keyboard.`);
         });
+      });
+
+      document.querySelector('#manual-layout-form').addEventListener('submit', () => {
+        document.querySelectorAll('.manual-input').forEach(normalizeNumberInput);
       });
 
       document.querySelector('#reset-manual-layout').addEventListener('click', () => {

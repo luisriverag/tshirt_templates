@@ -139,11 +139,11 @@
                   <small>Practical gaps keep badges separable without wasting paper.</small>
                 </label>
                 <label>Page margin
-                  <input type="number" name="page_margin" id="page-margin-input" min="0" max="5" step="0.1" value="{{ default_page_margin_amounts[default_unit] }}">
+                  <input type="number" name="page_margin" id="page-margin-input" min="0" max="5" step="0.01" value="{{ default_page_margin_amounts[default_unit] }}">
                   <small>Outer sheet margin in <span class="dynamic-unit">{{ default_unit }}</span>.</small>
                 </label>
                 <label>Panel gap
-                  <input type="number" name="panel_gap" id="panel-gap-input" min="0" max="10" step="0.1" value="{{ default_panel_gap_amounts[default_unit] }}">
+                  <input type="number" name="panel_gap" id="panel-gap-input" min="0" max="10" step="0.01" value="{{ default_panel_gap_amounts[default_unit] }}">
                   <small>Space between front/back panels in <span class="dynamic-unit">{{ default_unit }}</span>.</small>
                 </label>
                 <label>Front text
@@ -200,7 +200,7 @@
                   </select>
                 </label>
                 <label>Curve diameter
-                  <input type="number" name="curve_diameter" id="curve-diameter-input" min="1" max="50" step="0.1" value="8.0">
+                  <input type="number" name="curve_diameter" id="curve-diameter-input" min="2.5" max="50" step="0.01" value="8.0">
                   <small>Measured in <span id="curve-diameter-unit">{{ default_unit }}</span>.</small>
                 </label>
                 <div class="curve-helper" aria-live="polite">
@@ -305,6 +305,32 @@
         curveDeviceDiameters: {{ curve_device_diameters|tojson }},
       };
 
+      function decimalPlaces(value) {
+        const text = String(value || '1');
+        if (text.includes('e-')) return Number(text.split('e-')[1]);
+        return (text.split('.')[1] || '').length;
+      }
+
+      function normalizeNumberInput(input) {
+        const fallback = Number(input.dataset.defaultValue || input.defaultValue || input.value || input.min || 0);
+        let value = Number(input.value);
+        if (!Number.isFinite(value)) value = fallback;
+        const min = input.min === '' ? -Infinity : Number(input.min);
+        const max = input.max === '' ? Infinity : Number(input.max);
+        value = Math.min(Math.max(value, min), max);
+        if (input.step && input.step !== 'any') {
+          const step = Number(input.step);
+          if (Number.isFinite(step) && step > 0) {
+            const base = Number.isFinite(min) ? min : 0;
+            value = base + Math.round((value - base) / step) * step;
+            value = Math.min(Math.max(value, min), max);
+            input.value = value.toFixed(decimalPlaces(input.step)).replace(/\.?0+$/, '');
+            return;
+          }
+        }
+        input.value = String(value);
+      }
+
       function fillAmountSelect(select, values, selectedValue) {
         select.innerHTML = '';
         values.forEach((value) => {
@@ -328,13 +354,19 @@
         fillAmountSelect(badgeSizeSelect, badgeSizeOptions[unit], defaultValues.badgeSize[unit]);
         fillAmountSelect(spacingSelect, spacingOptions[unit], defaultValues.spacing[unit]);
         fillAmountSelect(logoSizeSelect, logoSizeOptions[unit], defaultValues.logoSize[unit]);
-        pageMarginInput.value = defaultValues.pageMargin[unit];
-        panelGapInput.value = defaultValues.panelGap[unit];
+        pageMarginInput.dataset.defaultValue = defaultValues.pageMargin[unit];
+        panelGapInput.dataset.defaultValue = defaultValues.panelGap[unit];
+        pageMarginInput.value = pageMarginInput.dataset.defaultValue;
+        panelGapInput.value = panelGapInput.dataset.defaultValue;
         dynamicUnitLabels.forEach((label) => { label.textContent = unit; });
         pageMarginInput.max = unit === 'cm' ? '5' : '2';
         panelGapInput.max = unit === 'cm' ? '10' : '4';
+        curveDiameterInput.min = unit === 'cm' ? '2.5' : '1';
+        curveDiameterInput.max = unit === 'cm' ? '50' : '20';
         const selectedCurveDevice = curveDeviceSelect.value || 'custom';
-        curveDiameterInput.value = defaultValues.curveDeviceDiameters[selectedCurveDevice][unit] || defaultValues.curveDiameter[unit];
+        curveDiameterInput.dataset.defaultValue = defaultValues.curveDeviceDiameters[selectedCurveDevice][unit] || defaultValues.curveDiameter[unit];
+        curveDiameterInput.value = curveDiameterInput.dataset.defaultValue;
+        [pageMarginInput, panelGapInput, curveDiameterInput].forEach(normalizeNumberInput);
         updateCurveHelper();
       }
 
@@ -345,8 +377,17 @@
       }
 
       curveDeviceSelect.addEventListener('change', updateAmountSelectors);
+      [pageMarginInput, panelGapInput, curveDiameterInput].forEach((input) => {
+        input.addEventListener('change', () => {
+          normalizeNumberInput(input);
+          updateCurveHelper();
+        });
+      });
       curveDiameterInput.addEventListener('input', updateCurveHelper);
       unitSelect.addEventListener('change', updateAmountSelectors);
+      document.querySelector('.generator').addEventListener('submit', () => {
+        [pageMarginInput, panelGapInput, curveDiameterInput].forEach(normalizeNumberInput);
+      });
       updateAmountSelectors();
 
       function visibleBadgeCards() {
