@@ -103,20 +103,32 @@ def _draw_raster(pdf: canvas.Canvas, content: bytes, x: float, y: float, width: 
     pdf.drawImage(ImageReader(BytesIO(content)), x, y, width=width, height=height, preserveAspectRatio=True, mask="auto")
 
 
-def _draw_badge(pdf: canvas.Canvas, badge: Badge, x: float, y: float, width: float, height: float) -> None:
+def _draw_missing_badge(pdf: canvas.Canvas, badge: Badge, x: float, y: float, width: float, height: float) -> None:
+    pdf.setStrokeColor(colors.HexColor("#cc3a3a"))
+    pdf.setFillColor(colors.HexColor("#fff5f5"))
+    pdf.roundRect(x, y, width, height, 8, stroke=1, fill=1)
+    pdf.setFillColor(colors.HexColor("#7a1f1f"))
+    pdf.setFont("Helvetica-Bold", 8)
+    pdf.drawCentredString(x + width / 2, y + height / 2, escape(badge.name[:24]))
+
+
+def _draw_badge(
+    pdf: canvas.Canvas,
+    badge: Badge,
+    x: float,
+    y: float,
+    width: float,
+    height: float,
+    content: bytes | None = None,
+) -> None:
     try:
-        content = _fetch_asset(badge)
-        if badge.extension == ".svg" or content.lstrip().startswith(b"<svg"):
-            _draw_svg(pdf, content, x, y, width, height)
+        asset_content = _fetch_asset(badge) if content is None else content
+        if badge.extension == ".svg" or asset_content.lstrip().startswith(b"<svg"):
+            _draw_svg(pdf, asset_content, x, y, width, height)
         else:
-            _draw_raster(pdf, content, x, y, width, height)
+            _draw_raster(pdf, asset_content, x, y, width, height)
     except Exception:
-        pdf.setStrokeColor(colors.HexColor("#cc3a3a"))
-        pdf.setFillColor(colors.HexColor("#fff5f5"))
-        pdf.roundRect(x, y, width, height, 8, stroke=1, fill=1)
-        pdf.setFillColor(colors.HexColor("#7a1f1f"))
-        pdf.setFont("Helvetica-Bold", 8)
-        pdf.drawCentredString(x + width / 2, y + height / 2, escape(badge.name[:24]))
+        _draw_missing_badge(pdf, badge, x, y, width, height)
 
 
 def _font_name(font_key: str) -> str:
@@ -315,6 +327,12 @@ def render_pdf(
     """Render selected badge layouts into a PDF byte string."""
 
     badge_lookup = {badge.id: badge for badge in badges}
+    asset_cache: dict[str, bytes | Exception] = {}
+    for badge in badge_lookup.values():
+        try:
+            asset_cache[badge.id] = _fetch_asset(badge)
+        except Exception as error:
+            asset_cache[badge.id] = error
     buffer = BytesIO()
     page_width, page_height = page_size
     pdf = canvas.Canvas(buffer, pagesize=page_size)
@@ -356,7 +374,19 @@ def render_pdf(
             )
             pdf.translate(curved_x, curved_y)
             pdf.rotate(curved_rotation)
-            _draw_badge(pdf, badge, -placement.width / 2, -placement.height / 2, placement.width, placement.height)
+            cached_asset = asset_cache.get(badge.id)
+            if isinstance(cached_asset, Exception):
+                _draw_missing_badge(pdf, badge, -placement.width / 2, -placement.height / 2, placement.width, placement.height)
+            else:
+                _draw_badge(
+                    pdf,
+                    badge,
+                    -placement.width / 2,
+                    -placement.height / 2,
+                    placement.width,
+                    placement.height,
+                    cached_asset,
+                )
             if cut_lines:
                 _draw_cut_line(pdf, -placement.width / 2, -placement.height / 2, placement.width, placement.height)
             pdf.restoreState()
