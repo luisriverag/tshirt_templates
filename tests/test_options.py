@@ -24,7 +24,7 @@ def test_parse_layout_options_accepts_valid_values():
         "order": "category",
         "front_text": "  Ada   Lovelace  ",
         "back_text": "MakeSpace Madrid",
-        "text_font": "dejavu",
+        "text_font": "fredoka-one",
         "text_size": "36",
         "include_print_marks": "on",
         "include_cut_lines": "on",
@@ -33,7 +33,7 @@ def test_parse_layout_options_accepts_valid_values():
         "curve_diameter": "3.25",
     }
 
-    assert parse_layout_options(values, _getlist({"sides": ["back"]})) == LayoutOptions(
+    assert parse_layout_options(values, _getlist({"sides": ["back"], "logo_sides": ["back"]})) == LayoutOptions(
         sides=["back"],
         page_size="a3",
         orientation="landscape",
@@ -44,6 +44,7 @@ def test_parse_layout_options_accepts_valid_values():
         page_margin="0.75",
         panel_gap="1.25",
         include_logo=True,
+        logo_sides=["back"],
         logo_size="3.0",
         front_logo_size="3.0",
         back_logo_size="3.0",
@@ -59,7 +60,7 @@ def test_parse_layout_options_accepts_valid_values():
         mirror=True,
         front_text="Ada Lovelace",
         back_text="MakeSpace Madrid",
-        text_font="dejavu",
+        text_font="fredoka-one",
         text_size="36",
         include_print_marks=True,
         include_cut_lines=True,
@@ -142,6 +143,7 @@ def test_parse_layout_options_defaults_to_both_sides_and_mirror_when_none_are_va
     assert options.mirror is True
     assert options.page_margin == "1.25"
     assert options.panel_gap == "0.85"
+    assert options.logo_sides == ["front", "back"]
 
 
 def test_parse_layout_options_accepts_m_pixel_mode():
@@ -183,6 +185,18 @@ def test_parse_layout_options_converts_centimeters_to_inches():
     assert options.panel_gap_inches == approx(3.0 / 2.54)
     assert options.logo_size_inches == approx(15.0 / 2.54)
     assert options.curve_diameter_inches == approx(12.0 / 2.54)
+
+
+def test_parse_layout_options_accepts_large_centimeter_logo_sizes():
+    options = parse_layout_options(
+        {"unit": "cm", "logo_size": "20.0", "front_logo_size": "25.0", "back_logo_size": "20.0"},
+        _getlist({"sides": ["front"]}),
+    )
+
+    assert options.logo_size == "20.0"
+    assert options.front_logo_size == "25.0"
+    assert options.back_logo_size == "20.0"
+    assert options.front_logo_size_inches == approx(25.0 / 2.54)
 
 
 def test_parse_layout_options_uses_curve_device_preset_when_no_diameter_is_supplied():

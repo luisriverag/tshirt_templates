@@ -198,6 +198,7 @@
           {% if form.get(key) %}<input type="hidden" name="{{ key }}" value="{{ form.get(key) }}">{% endif %}
         {% endfor %}
         {% for side in form.getlist('sides') %}<input type="hidden" name="sides" value="{{ side }}">{% endfor %}
+        {% for side in form.getlist('logo_sides') %}<input type="hidden" name="logo_sides" value="{{ side }}">{% endfor %}
         {% for badge_id in selected_ids.get('front', []) %}<input type="hidden" name="front_badges" value="{{ badge_id }}">{% endfor %}
         {% for badge_id in selected_ids.get('back', []) %}<input type="hidden" name="back_badges" value="{{ badge_id }}">{% endfor %}
         <div class="actions">
