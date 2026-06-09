@@ -18,6 +18,10 @@ This backlog only tracks work that is not already available in the current app. 
 - Add configurable DPI/rasterization behavior for raster assets.
 - Add a non-mirrored proof PDF alongside the mirrored transfer PDF.
 - Add export to SVG/PNG for users who want to edit layouts in design tools.
+- Add a dedicated print-preview mode that shows guides in the browser without including them in final PDFs.
+- Add per-export toggles for curve guides, registration marks, and badge cut-line outlines.
+- Add a preflight summary that warns about low-resolution, missing, or transparency-heavy artwork before PDF export.
+- Add a compact PDF export option that deduplicates repeated badge artwork across pages.
 
 ## API and Automation
 
