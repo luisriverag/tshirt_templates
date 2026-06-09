@@ -61,14 +61,21 @@ def test_index_renders_badge_picker(monkeypatch):
     assert b"Badge order" in response.data
     assert b"All badges are selected by default" in response.data
     assert b"selected-badge-count" in response.data
+    assert b"both-badge-count" in response.data
+    assert b"side-selection-notice" in response.data
     assert b"visible-badge-count" in response.data
     assert b"Circumference: about" in response.data
     assert b"Search badges" in response.data
+    assert b"Show assignment" in response.data
+    assert b"All assignments" in response.data
+    assert b"Reset filters" in response.data
     assert b"Skip badge list and continue to actions" in response.data
     assert b'id="badge-picker-help"' in response.data
     assert b'aria-describedby="badge-picker-help"' in response.data
     assert b'id="template-actions"' in response.data
     assert b"Select visible" in response.data
+    assert b"Front only" in response.data
+    assert b"Back only" in response.data
     assert b"Clear visible" in response.data
     assert b'draggable="true"' in response.data
     assert b'data-category="uncategorized"' in response.data
@@ -1323,3 +1330,39 @@ def test_mcp_saved_template_tools_and_resources(tmp_path):
     assert item_payload["template"] == template
     assert delete.status_code == 200
     assert delete.json["result"]["structuredContent"] == {"deleted": "mcp-shirt"}
+
+
+def test_preview_uses_front_and_back_badge_assignments(monkeypatch):
+    front_badge = Badge(
+        id="front.svg",
+        name="Front Badge",
+        path="front.svg",
+        raw_url="/static/demo-badge.svg",
+        extension=".svg",
+    )
+    back_badge = Badge(
+        id="back.svg",
+        name="Back Badge",
+        path="back.svg",
+        raw_url="/static/demo-badge.svg",
+        extension=".svg",
+    )
+    monkeypatch.setattr("tshirt_templates.badges.list_badges", lambda: [front_badge, back_badge])
+    app = create_app()
+
+    response = app.test_client().post(
+        "/preview",
+        data={
+            "front_badges": [front_badge.id],
+            "back_badges": [back_badge.id],
+            "sides": ["front", "back"],
+        },
+    )
+
+    assert response.status_code == 200
+    assert b"Front Badge on Front" in response.data
+    assert b"Back Badge on Back" in response.data
+    assert b"Front Badge on Back" not in response.data
+    assert b"Back Badge on Front" not in response.data
+    assert b'name="front_badges" value="front.svg"' in response.data
+    assert b'name="back_badges" value="back.svg"' in response.data

@@ -27,6 +27,18 @@
         </div>
       </section>
 
+      <section class="panel quick-guide" aria-labelledby="quick-guide-title">
+        <div class="section-heading">
+          <h2 id="quick-guide-title">Quick print guide</h2>
+          <span>Check before pressing</span>
+        </div>
+        <div class="guide-cards">
+          <article><strong>Mirror transfers</strong><p>Keep mirroring on for sublimation transfer paper unless your printer driver already mirrors the sheet.</p></article>
+          <article><strong>Leave cut spacing</strong><p>Use enough spacing and optional cut-line outlines so each badge can be trimmed cleanly.</p></article>
+          <article><strong>Measure curves</strong><p>For mugs or canteens, measure the outside diameter and test the wrap on scrap paper first.</p></article>
+        </div>
+      </section>
+
 
 
       {% if upload_messages %}
@@ -41,6 +53,77 @@
       {% endif %}
 
       <form class="generator" method="post" action="/preview" enctype="multipart/form-data">
+        <section class="panel">
+          <div class="section-heading">
+            <h2>Badges</h2>
+            <span>{{ badges|length }} image assets</span>
+          </div>
+          <p class="hint" id="badge-picker-help">All badges are selected by default for both sides. Badges appear before template options so you can pick artwork first. Choose whether each badge prints on the front, back, or both; drag cards to set the initial order.</p>
+          <div class="selection-summary" aria-live="polite">
+            <strong><span id="front-badge-count">{{ selected_ids|length }}</span> front</strong>
+            <strong><span id="back-badge-count">{{ selected_ids|length }}</span> back</strong>
+            <span><span id="both-badge-count">{{ selected_ids|length }}</span> on both pages</span>
+            <span class="compat-count"><span id="selected-badge-count">{{ selected_ids|length }}</span> selected by default</span>
+            <span><span id="visible-badge-count">{{ badges|length }}</span> visible after filters</span>
+          </div>
+          <p class="side-selection-notice" id="side-selection-notice" aria-live="polite">Front and back are ready.</p>
+          <a class="skip-badge-list" href="#template-actions">Skip badge list and continue to actions</a>
+          <div class="badge-toolbar" aria-label="Badge search and bulk selection">
+            <label>Search badges
+              <input type="search" id="badge-search" placeholder="Name or path" autocomplete="off">
+            </label>
+            <label>Category
+              <select id="badge-category-filter">
+                <option value="all">All categories</option>
+                {% for category in badge_categories %}
+                  <option value="{{ category|lower }}">{{ category }}</option>
+                {% endfor %}
+              </select>
+            </label>
+            <label>Show assignment
+              <select id="badge-side-filter">
+                <option value="all">All assignments</option>
+                <option value="front">Front page</option>
+                <option value="back">Back page</option>
+                <option value="both">Both pages</option>
+                <option value="none">Not printed</option>
+              </select>
+            </label>
+            <div class="bulk-side-actions" aria-label="Apply side assignment to visible badges">
+              <button type="button" class="secondary-button" id="select-visible-badges">Select visible for both sides</button>
+              <button type="button" class="secondary-button" id="front-visible-badges">Front only</button>
+              <button type="button" class="secondary-button" id="back-visible-badges">Back only</button>
+              <button type="button" class="secondary-button" id="clear-visible-badges">Clear visible</button>
+              <button type="button" class="secondary-button" id="reset-badge-filters">Reset filters</button>
+            </div>
+          </div>
+          <div class="badge-grid" id="badge-grid" aria-describedby="badge-picker-help">
+            {% for badge in badges %}
+              {% set badge_category = badge.path.rsplit('/', 1)[0] if '/' in badge.path else 'Uncategorized' %}
+              <article class="badge-card" draggable="true" data-name="{{ badge.name|lower }}" data-path="{{ badge.path|lower }}" data-category="{{ badge_category|lower }}">
+                <span class="drag-handle" aria-hidden="true">↕ Drag</span>
+                <span class="side-picker" aria-label="Choose print sides for {{ badge.name }}">
+                  <span>Print on</span>
+                  <label class="side-option"><input type="checkbox" name="front_badges" value="{{ badge.id }}" {% if badge.id in selected_ids %}checked{% endif %}> Front</label>
+                  <label class="side-option"><input type="checkbox" name="back_badges" value="{{ badge.id }}" {% if badge.id in selected_ids %}checked{% endif %}> Back</label>
+                </span>
+                <span class="assignment-chip" aria-live="polite">Both pages</span>
+                <span class="thumb"><img src="{{ badge.raw_url }}" alt="{{ badge.name }}" loading="lazy"></span>
+                <strong>{{ badge.name }}</strong>
+                <small>{{ badge.path }}</small>
+                {% if badge.id[:7] == 'upload:' %}
+                  <span class="upload-card-actions">
+                    <input type="file" name="replacement_upload" accept=".svg,.png,.jpg,.jpeg,image/svg+xml,image/png,image/jpeg">
+                    <button type="submit" class="secondary-button upload-card-button" formaction="/uploads/replace" formmethod="post" name="replace_upload" value="{{ badge.id[7:] }}">Replace upload</button>
+                    <button type="submit" class="secondary-button upload-card-button" formaction="/uploads/delete" formmethod="post" name="delete_upload" value="{{ badge.id[7:] }}">Delete upload</button>
+                  </span>
+                {% endif %}
+              </article>
+            {% endfor %}
+          </div>
+        </section>
+
+
         <section class="panel controls">
           <div class="section-heading">
             <h2>Template options</h2>
@@ -203,53 +286,6 @@
           </div>
         </section>
 
-        <section class="panel">
-          <div class="section-heading">
-            <h2>Badges</h2>
-            <span>{{ badges|length }} image assets</span>
-          </div>
-          <p class="hint" id="badge-picker-help">All badges are selected by default. Search, filter by category, bulk-select the visible cards, or drag cards to set the initial selection order.</p>
-          <div class="selection-summary" aria-live="polite">
-            <strong><span id="selected-badge-count">{{ selected_ids|length }}</span> selected</strong>
-            <span><span id="visible-badge-count">{{ badges|length }}</span> visible after filters</span>
-          </div>
-          <a class="skip-badge-list" href="#template-actions">Skip badge list and continue to actions</a>
-          <div class="badge-toolbar" aria-label="Badge search and bulk selection">
-            <label>Search badges
-              <input type="search" id="badge-search" placeholder="Name or path" autocomplete="off">
-            </label>
-            <label>Category
-              <select id="badge-category-filter">
-                <option value="all">All categories</option>
-                {% for category in badge_categories %}
-                  <option value="{{ category|lower }}">{{ category }}</option>
-                {% endfor %}
-              </select>
-            </label>
-            <button type="button" class="secondary-button" id="select-visible-badges">Select visible</button>
-            <button type="button" class="secondary-button" id="clear-visible-badges">Clear visible</button>
-          </div>
-          <div class="badge-grid" id="badge-grid" aria-describedby="badge-picker-help">
-            {% for badge in badges %}
-              {% set badge_category = badge.path.rsplit('/', 1)[0] if '/' in badge.path else 'Uncategorized' %}
-              <label class="badge-card" draggable="true" data-name="{{ badge.name|lower }}" data-path="{{ badge.path|lower }}" data-category="{{ badge_category|lower }}">
-                <span class="drag-handle" aria-hidden="true">↕ Drag</span>
-                <input type="checkbox" name="badges" value="{{ badge.id }}" {% if badge.id in selected_ids %}checked{% endif %}>
-                <span class="thumb"><img src="{{ badge.raw_url }}" alt="{{ badge.name }}" loading="lazy"></span>
-                <strong>{{ badge.name }}</strong>
-                <small>{{ badge.path }}</small>
-                {% if badge.id[:7] == 'upload:' %}
-                  <span class="upload-card-actions">
-                    <input type="file" name="replacement_upload" accept=".svg,.png,.jpg,.jpeg,image/svg+xml,image/png,image/jpeg">
-                    <button type="submit" class="secondary-button upload-card-button" formaction="/uploads/replace" formmethod="post" name="replace_upload" value="{{ badge.id[7:] }}">Replace upload</button>
-                    <button type="submit" class="secondary-button upload-card-button" formaction="/uploads/delete" formmethod="post" name="delete_upload" value="{{ badge.id[7:] }}">Delete upload</button>
-                  </span>
-                {% endif %}
-              </label>
-            {% endfor %}
-          </div>
-        </section>
-
         <div class="actions" id="template-actions">
           <button type="submit">Preview template</button>
           <button type="submit" formaction="/pdf">Download PDF</button>
@@ -262,6 +298,7 @@
       const badgeGrid = document.querySelector('#badge-grid');
       const badgeSearch = document.querySelector('#badge-search');
       const badgeCategoryFilter = document.querySelector('#badge-category-filter');
+      const badgeSideFilter = document.querySelector('#badge-side-filter');
       const badgeSizeSelect = document.querySelector('#badge-size-select');
       const spacingSelect = document.querySelector('#spacing-select');
       const logoSizeSelect = document.querySelector('#logo-size-select');
@@ -273,8 +310,12 @@
       const curveDiameterUnit = document.querySelector('#curve-diameter-unit');
       const curveCircumference = document.querySelector('#curve-circumference');
       const includeCurveEffect = document.querySelector('#include-curve-effect');
+      const frontBadgeCount = document.querySelector('#front-badge-count');
+      const backBadgeCount = document.querySelector('#back-badge-count');
+      const bothBadgeCount = document.querySelector('#both-badge-count');
       const selectedBadgeCount = document.querySelector('#selected-badge-count');
       const visibleBadgeCount = document.querySelector('#visible-badge-count');
+      const sideSelectionNotice = document.querySelector('#side-selection-notice');
       const badgeSizeOptions = {{ badge_size_options|tojson }};
       const spacingOptions = {{ spacing_options|tojson }};
       const logoSizeOptions = {{ logo_size_options|tojson }};
@@ -353,10 +394,42 @@
         updateCurveHelper();
       }
 
+      function updateCardAssignment(card) {
+        const frontChecked = card.querySelector('input[name="front_badges"]').checked;
+        const backChecked = card.querySelector('input[name="back_badges"]').checked;
+        const chip = card.querySelector('.assignment-chip');
+        let state = 'none';
+        let label = 'Not printed';
+        if (frontChecked && backChecked) {
+          state = 'both';
+          label = 'Both pages';
+        } else if (frontChecked) {
+          state = 'front';
+          label = 'Front only';
+        } else if (backChecked) {
+          state = 'back';
+          label = 'Back only';
+        }
+        card.dataset.assignment = state;
+        chip.textContent = label;
+      }
+
       function updateBadgeCounts() {
         const cards = [...badgeGrid.querySelectorAll('.badge-card')];
-        selectedBadgeCount.textContent = cards.filter((card) => card.querySelector('input[type="checkbox"]').checked).length;
+        cards.forEach(updateCardAssignment);
+        const frontCount = cards.filter((card) => card.querySelector('input[name="front_badges"]').checked).length;
+        const backCount = cards.filter((card) => card.querySelector('input[name="back_badges"]').checked).length;
+        const bothCount = cards.filter((card) => card.dataset.assignment === 'both').length;
+        frontBadgeCount.textContent = frontCount;
+        backBadgeCount.textContent = backCount;
+        bothBadgeCount.textContent = bothCount;
+        selectedBadgeCount.textContent = cards.filter((card) => card.dataset.assignment !== 'none').length;
         visibleBadgeCount.textContent = cards.filter((card) => !card.hidden).length;
+        const warnings = [];
+        if (frontCount === 0) warnings.push('front page has no badges');
+        if (backCount === 0) warnings.push('back page has no badges');
+        sideSelectionNotice.textContent = warnings.length ? `Warning: ${warnings.join(' and ')}.` : 'Front and back are ready.';
+        sideSelectionNotice.classList.toggle('warning', warnings.length > 0);
       }
 
       curveDeviceSelect.addEventListener('change', updateAmountSelectors);
@@ -377,31 +450,54 @@
         return [...badgeGrid.querySelectorAll('.badge-card')].filter((card) => !card.hidden);
       }
 
+      function assignmentMatchesFilter(card, assignmentFilter) {
+        if (assignmentFilter === 'all') return true;
+        if (assignmentFilter === 'front') return ['front', 'both'].includes(card.dataset.assignment);
+        if (assignmentFilter === 'back') return ['back', 'both'].includes(card.dataset.assignment);
+        return card.dataset.assignment === assignmentFilter;
+      }
+
       function filterBadges() {
         const query = badgeSearch.value.trim().toLowerCase();
         const category = badgeCategoryFilter.value;
+        const assignmentFilter = badgeSideFilter.value;
         badgeGrid.querySelectorAll('.badge-card').forEach((card) => {
+          updateCardAssignment(card);
           const matchesQuery = !query || card.dataset.name.includes(query) || card.dataset.path.includes(query);
           const matchesCategory = category === 'all' || card.dataset.category === category;
-          card.hidden = !(matchesQuery && matchesCategory);
+          const matchesAssignment = assignmentMatchesFilter(card, assignmentFilter);
+          card.hidden = !(matchesQuery && matchesCategory && matchesAssignment);
         });
         updateBadgeCounts();
       }
 
       badgeGrid.addEventListener('change', (event) => {
-        if (event.target.matches('input[type="checkbox"]')) updateBadgeCounts();
+        if (event.target.matches('input[type="checkbox"]')) filterBadges();
       });
       badgeSearch.addEventListener('input', filterBadges);
       badgeCategoryFilter.addEventListener('change', filterBadges);
-      document.querySelector('#select-visible-badges').addEventListener('click', () => {
-        visibleBadgeCards().forEach((card) => { card.querySelector('input[type="checkbox"]').checked = true; });
-        updateBadgeCounts();
+      badgeSideFilter.addEventListener('change', filterBadges);
+      function setCardAssignment(card, assignment) {
+        card.querySelector('input[name="front_badges"]').checked = ['front', 'both'].includes(assignment);
+        card.querySelector('input[name="back_badges"]').checked = ['back', 'both'].includes(assignment);
+      }
+
+      function applyVisibleAssignment(assignment) {
+        visibleBadgeCards().forEach((card) => setCardAssignment(card, assignment));
+        filterBadges();
+      }
+
+      document.querySelector('#select-visible-badges').addEventListener('click', () => applyVisibleAssignment('both'));
+      document.querySelector('#front-visible-badges').addEventListener('click', () => applyVisibleAssignment('front'));
+      document.querySelector('#back-visible-badges').addEventListener('click', () => applyVisibleAssignment('back'));
+      document.querySelector('#clear-visible-badges').addEventListener('click', () => applyVisibleAssignment('none'));
+      document.querySelector('#reset-badge-filters').addEventListener('click', () => {
+        badgeSearch.value = '';
+        badgeCategoryFilter.value = 'all';
+        badgeSideFilter.value = 'all';
+        filterBadges();
       });
-      document.querySelector('#clear-visible-badges').addEventListener('click', () => {
-        visibleBadgeCards().forEach((card) => { card.querySelector('input[type="checkbox"]').checked = false; });
-        updateBadgeCounts();
-      });
-      updateBadgeCounts();
+      filterBadges();
 
       let draggedCard = null;
 

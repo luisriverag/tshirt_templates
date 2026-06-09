@@ -183,3 +183,32 @@ def test_m_pixel_layout_shrinks_pixels_to_fit_the_panel():
 
     assert all(len(layout.placements) == 25 for layout in layouts)
     assert all(placement.width < 4.0 * 72 for layout in layouts for placement in layout.placements)
+
+
+def test_layout_can_use_different_badges_per_side():
+    _, layouts = place_badges(
+        {"front": ["front-only"], "back": ["back-only", "shared"]},
+        ["front", "back"],
+        mode="grid",
+    )
+
+    placements_by_side = {
+        layout.side: [placement.badge_id for placement in layout.placements]
+        for layout in layouts
+    }
+    assert placements_by_side["front"] == ["front-only"]
+    assert placements_by_side["back"] == ["back-only", "shared"]
+
+
+def test_layout_can_size_each_side_to_a_separate_page():
+    page_size, layouts = place_badges(
+        {"front": ["front-only"], "back": ["back-only"]},
+        ["front", "back"],
+        separate_side_pages=True,
+    )
+
+    assert page_size == (595.28, 841.89)
+    assert len(layouts) == 2
+    assert layouts[0].x == layouts[1].x
+    assert layouts[0].width == layouts[1].width
+    assert layouts[0].width > page_size[0] / 2

@@ -15,7 +15,7 @@
           <p class="eyebrow">Preview</p>
         </div>
         <h1>{{ form.get('mode', 'grid')|title }} placement</h1>
-        <p>{{ badges|length }} selected badges laid out across {{ layouts|length }} panel(s). Drag badges on the sheet or edit their coordinates below before downloading.</p>
+        <p>{{ badges|length }} selected badges laid out across {{ layouts|length }} PDF page(s). Drag badges on each page or edit their coordinates below before downloading.</p>
       </section>
 
 
@@ -47,49 +47,52 @@
         <div id="preview-status" class="sr-status" role="status" aria-live="polite">Preview ready. Ctrl/Shift-click badges to multi-select, then drag or nudge them together.</div>
       </section>
 
-      <div class="preview-wrap">
-        <svg class="page-preview" viewBox="0 0 {{ page_width }} {{ page_height }}" role="img" aria-labelledby="preview-title preview-description">
-          <title id="preview-title">PDF template preview</title>
-          <desc id="preview-description">{{ badges|length }} selected badges across {{ layouts|length }} panel(s). Detailed placement coordinates are listed in the layout summary after the preview.</desc>
-          <rect x="0" y="0" width="{{ page_width }}" height="{{ page_height }}" fill="white"/>
-          {% for layout in layouts %}
-            {% set layout_index = loop.index0 %}
-            <rect class="panel-outline" x="{{ layout.x }}" y="{{ page_height - layout.y - layout.height }}" width="{{ layout.width }}" height="{{ layout.height }}" rx="12"/>
-            <text x="{{ layout.x + 10 }}" y="{{ page_height - layout.y - layout.height + 22 }}" class="panel-title">{{ layout.side|upper }}</text>
-            {% set panel_text = form.get(layout.side ~ '_text', '') %}
-            {% if panel_text %}
-              <text x="{{ layout.x + layout.width / 2 }}" y="{{ page_height - layout.y - 18 }}" class="panel-custom-text" font-family="{{ form.get('text_font', 'ubuntu')|replace('-', ' ') }}, Ubuntu, Helvetica, Arial, sans-serif" font-size="28">{{ panel_text }}</text>
-            {% endif %}
-            {% for placement in layout.placements %}
-              {% set placement_index = loop.index0 %}
-              {% set badge = badge_lookup.get(placement.badge_id) %}
-              {% if badge %}
-                <g class="draggable-badge" tabindex="0" role="button" aria-pressed="false" aria-label="Move {{ badge.name }}" data-key="{{ layout_index }}_{{ placement_index }}" data-x="{{ placement.x }}" data-y="{{ page_height - placement.y - placement.height }}" data-width="{{ placement.width }}" data-height="{{ placement.height }}" data-rotation="{{ -placement.rotation }}" data-panel-x="{{ layout.x }}" data-panel-y="{{ page_height - layout.y - layout.height }}" data-panel-width="{{ layout.width }}" data-panel-height="{{ layout.height }}" data-selected="false">
-                  <title>{{ badge.name }}</title>
-                  <g class="badge-transform" transform="translate({{ placement.x + placement.width / 2 }} {{ page_height - placement.y - placement.height / 2 }}) rotate({{ -placement.rotation }})">
-                    <image href="{{ badge.raw_url }}" x="{{ -placement.width / 2 }}" y="{{ -placement.height / 2 }}" width="{{ placement.width }}" height="{{ placement.height }}" preserveAspectRatio="xMidYMid meet"/>
-                    {% if form.get('include_cut_lines') == 'on' %}<rect class="cut-line-outline" x="{{ -placement.width / 2 }}" y="{{ -placement.height / 2 }}" width="{{ placement.width }}" height="{{ placement.height }}" rx="6"/>{% endif %}
-                    <rect class="badge-contrast-outline" x="{{ -placement.width / 2 }}" y="{{ -placement.height / 2 }}" width="{{ placement.width }}" height="{{ placement.height }}" rx="6"/>
-                    <rect class="selection-outline" x="{{ -placement.width / 2 - 5 }}" y="{{ -placement.height / 2 - 5 }}" width="{{ placement.width + 10 }}" height="{{ placement.height + 10 }}" rx="9"/>
-                    <rect class="collision-outline" x="{{ -placement.width / 2 }}" y="{{ -placement.height / 2 }}" width="{{ placement.width }}" height="{{ placement.height }}" rx="6"/>
-                  </g>
-                </g>
+      <div class="preview-pages">
+        {% for layout in layouts %}
+          {% set layout_index = loop.index0 %}
+          <div class="preview-wrap">
+            <h2 class="preview-page-title">Page {{ loop.index }} · {{ layout.side|title }}</h2>
+            <svg class="page-preview" viewBox="0 0 {{ page_width }} {{ page_height }}" role="img" aria-labelledby="preview-title-{{ layout_index }} preview-description-{{ layout_index }}">
+              <title id="preview-title-{{ layout_index }}">PDF template preview - {{ layout.side|title }} page</title>
+              <desc id="preview-description-{{ layout_index }}">{{ layout.side|title }} page with {{ layout.placements|length }} badge placement(s). Detailed placement coordinates are listed in the layout summary after the preview.</desc>
+              <rect x="0" y="0" width="{{ page_width }}" height="{{ page_height }}" fill="white"/>
+              <rect class="panel-outline" x="{{ layout.x }}" y="{{ page_height - layout.y - layout.height }}" width="{{ layout.width }}" height="{{ layout.height }}" rx="12"/>
+              <text x="{{ layout.x + 10 }}" y="{{ page_height - layout.y - layout.height + 22 }}" class="panel-title">{{ layout.side|upper }}</text>
+              {% set panel_text = form.get(layout.side ~ '_text', '') %}
+              {% if panel_text %}
+                <text x="{{ layout.x + layout.width / 2 }}" y="{{ page_height - layout.y - 18 }}" class="panel-custom-text" font-family="{{ form.get('text_font', 'ubuntu')|replace('-', ' ') }}, Ubuntu, Helvetica, Arial, sans-serif" font-size="28">{{ panel_text }}</text>
               {% endif %}
-            {% endfor %}
-          {% endfor %}
-        </svg>
+              {% for placement in layout.placements %}
+                {% set placement_index = loop.index0 %}
+                {% set badge = badge_lookup.get(placement.badge_id) %}
+                {% if badge %}
+                  <g class="draggable-badge" tabindex="0" role="button" aria-pressed="false" aria-label="Move {{ badge.name }}" data-key="{{ layout_index }}_{{ placement_index }}" data-x="{{ placement.x }}" data-y="{{ page_height - placement.y - placement.height }}" data-width="{{ placement.width }}" data-height="{{ placement.height }}" data-rotation="{{ -placement.rotation }}" data-panel-x="{{ layout.x }}" data-panel-y="{{ page_height - layout.y - layout.height }}" data-panel-width="{{ layout.width }}" data-panel-height="{{ layout.height }}" data-selected="false">
+                    <title>{{ badge.name }}</title>
+                    <g class="badge-transform" transform="translate({{ placement.x + placement.width / 2 }} {{ page_height - placement.y - placement.height / 2 }}) rotate({{ -placement.rotation }})">
+                      <image href="{{ badge.raw_url }}" x="{{ -placement.width / 2 }}" y="{{ -placement.height / 2 }}" width="{{ placement.width }}" height="{{ placement.height }}" preserveAspectRatio="xMidYMid meet"/>
+                      {% if form.get('include_cut_lines') == 'on' %}<rect class="cut-line-outline" x="{{ -placement.width / 2 }}" y="{{ -placement.height / 2 }}" width="{{ placement.width }}" height="{{ placement.height }}" rx="6"/>{% endif %}
+                      <rect class="badge-contrast-outline" x="{{ -placement.width / 2 }}" y="{{ -placement.height / 2 }}" width="{{ placement.width }}" height="{{ placement.height }}" rx="6"/>
+                      <rect class="selection-outline" x="{{ -placement.width / 2 - 5 }}" y="{{ -placement.height / 2 - 5 }}" width="{{ placement.width + 10 }}" height="{{ placement.height + 10 }}" rx="9"/>
+                      <rect class="collision-outline" x="{{ -placement.width / 2 }}" y="{{ -placement.height / 2 }}" width="{{ placement.width }}" height="{{ placement.height }}" rx="6"/>
+                    </g>
+                  </g>
+                {% endif %}
+              {% endfor %}
+            </svg>
+          </div>
+        {% endfor %}
       </div>
 
       <section class="panel layout-summary" aria-labelledby="layout-summary-title">
         <div class="section-heading">
           <h2 id="layout-summary-title">Layout summary</h2>
-          <span>{{ layouts|length }} panel(s)</span>
+          <span>{{ layouts|length }} PDF page(s)</span>
         </div>
-        <p class="hint">Text alternative for the generated preview. Coordinates use {{ unit }} from the page’s top-left corner.</p>
+        <p class="hint">Text alternative for the generated preview. Each side is exported as its own PDF page; coordinates use {{ unit }} from that page’s top-left corner.</p>
         <ul>
           {% for layout in layouts %}
             <li>
-              <strong>{{ layout.side|title }} panel:</strong>
+              <strong>{{ layout.side|title }} page:</strong>
               {{ layout.placements|length }} placement(s).
               <ul>
                 {% for placement in layout.placements %}
@@ -165,7 +168,8 @@
           {% if form.get(key) %}<input type="hidden" name="{{ key }}" value="{{ form.get(key) }}">{% endif %}
         {% endfor %}
         {% for side in form.getlist('sides') %}<input type="hidden" name="sides" value="{{ side }}">{% endfor %}
-        {% for badge_id in selected_ids %}<input type="hidden" name="badges" value="{{ badge_id }}">{% endfor %}
+        {% for badge_id in selected_ids.get('front', []) %}<input type="hidden" name="front_badges" value="{{ badge_id }}">{% endfor %}
+        {% for badge_id in selected_ids.get('back', []) %}<input type="hidden" name="back_badges" value="{{ badge_id }}">{% endfor %}
         <div class="actions">
           <button type="submit">Download mirrored PDF</button>
         </div>
@@ -173,7 +177,7 @@
     </main>
 
     <script>
-      const svg = document.querySelector('.page-preview');
+      const previewSvgs = [...document.querySelectorAll('.page-preview')];
       const pointsPerUnit = {{ points_per_unit }};
       const previewZoom = document.querySelector('#preview-zoom');
       const previewZoomValue = document.querySelector('#preview-zoom-value');
@@ -397,6 +401,7 @@
         badges.forEach((first, firstIndex) => {
           const a = { x: Number(first.dataset.x), y: Number(first.dataset.y), width: Number(first.dataset.width), height: Number(first.dataset.height) };
           badges.slice(firstIndex + 1).forEach((second) => {
+            if (first.ownerSVGElement !== second.ownerSVGElement) return;
             const b = { x: Number(second.dataset.x), y: Number(second.dataset.y), width: Number(second.dataset.width), height: Number(second.dataset.height) };
             const overlaps = a.x < b.x + b.width && a.x + a.width > b.x && a.y < b.y + b.height && a.y + a.height > b.y;
             if (overlaps) {
@@ -413,18 +418,19 @@
         }
       }
 
-      function svgPoint(event) {
-        const point = svg.createSVGPoint();
+      function svgPoint(event, targetSvg) {
+        const point = targetSvg.createSVGPoint();
         point.x = event.clientX;
         point.y = event.clientY;
-        return point.matrixTransform(svg.getScreenCTM().inverse());
+        return point.matrixTransform(targetSvg.getScreenCTM().inverse());
       }
 
       let drag = null;
       document.querySelectorAll('.draggable-badge').forEach((badge) => {
         badge.addEventListener('pointerdown', (event) => {
           event.preventDefault();
-          const point = svgPoint(event);
+          const currentSvg = badge.ownerSVGElement;
+          const point = svgPoint(event, currentSvg);
           selectedBadge = badge;
           if (event.ctrlKey || event.metaKey || event.shiftKey) {
             toggleBadgeSelection(badge);
@@ -438,6 +444,7 @@
             offsetY: point.y - Number(badge.dataset.y),
             startX: Number(badge.dataset.x),
             startY: Number(badge.dataset.y),
+            svg: currentSvg,
             badges: movableBadges.map((movableBadge) => ({
               badge: movableBadge,
               x: Number(movableBadge.dataset.x),
@@ -449,23 +456,25 @@
         });
       });
 
-      svg.addEventListener('pointermove', (event) => {
-        if (!drag) return;
-        const point = svgPoint(event);
-        const { x, y } = snapBadgePosition(drag.badge, point.x - drag.offsetX, point.y - drag.offsetY);
-        const deltaX = x - drag.startX;
-        const deltaY = y - drag.startY;
-        drag.badges.forEach((item) => {
-          setBadgeTransform(item.badge, item.x + deltaX, item.y + deltaY, -Number(item.badge.dataset.rotation));
-          updateInputsFromBadge(item.badge);
+      previewSvgs.forEach((previewSvg) => {
+        previewSvg.addEventListener('pointermove', (event) => {
+          if (!drag || drag.svg !== previewSvg) return;
+          const point = svgPoint(event, previewSvg);
+          const { x, y } = snapBadgePosition(drag.badge, point.x - drag.offsetX, point.y - drag.offsetY);
+          const deltaX = x - drag.startX;
+          const deltaY = y - drag.startY;
+          drag.badges.forEach((item) => {
+            setBadgeTransform(item.badge, item.x + deltaX, item.y + deltaY, -Number(item.badge.dataset.rotation));
+            updateInputsFromBadge(item.badge);
+          });
         });
-      });
 
-      svg.addEventListener('pointerup', () => {
-        if (!drag) return;
-        drag.badges.forEach((item) => item.badge.classList.remove('dragging'));
-        setStatus(`${drag.badges.length} badge${drag.badges.length === 1 ? '' : 's'} moved. Coordinates updated below.`);
-        drag = null;
+        previewSvg.addEventListener('pointerup', () => {
+          if (!drag || drag.svg !== previewSvg) return;
+          drag.badges.forEach((item) => item.badge.classList.remove('dragging'));
+          setStatus(`${drag.badges.length} badge${drag.badges.length === 1 ? '' : 's'} moved. Coordinates updated below.`);
+          drag = null;
+        });
       });
 
       document.querySelectorAll('.draggable-badge').forEach((badge) => {
@@ -516,12 +525,14 @@
       });
 
       previewZoom.addEventListener('input', () => {
-        svg.style.width = `${previewZoom.value}%`;
+        previewSvgs.forEach((previewSvg) => { previewSvg.style.width = `${previewZoom.value}%`; });
         previewZoomValue.textContent = `${previewZoom.value}%`;
       });
 
       highContrastPreview.addEventListener('change', () => {
-        svg.classList.toggle('high-contrast', highContrastPreview.checked);
+        previewSvgs.forEach((previewSvg) => {
+          previewSvg.classList.toggle('high-contrast', highContrastPreview.checked);
+        });
         setStatus(highContrastPreview.checked ? 'High-contrast preview outlines enabled.' : 'High-contrast preview outlines disabled.');
       });
 

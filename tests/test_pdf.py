@@ -1,3 +1,4 @@
+import re
 from tshirt_templates.badges import Badge
 from tshirt_templates.layout import PanelLayout, Placement
 import tshirt_templates.pdf as pdf_module
@@ -165,3 +166,28 @@ def test_curved_placement_rotates_and_sags_from_panel_center():
     assert center_x == 150.0
     assert center_y < 60.0
     assert rotation > 0.0
+
+
+def test_render_pdf_can_put_front_and_back_on_separate_pages():
+    front = Badge(
+        id="front.svg",
+        name="Front",
+        path="front.svg",
+        raw_url="/static/demo-badge.svg",
+        extension=".svg",
+    )
+    back = Badge(
+        id="back.svg",
+        name="Back",
+        path="back.svg",
+        raw_url="/static/demo-badge.svg",
+        extension=".svg",
+    )
+    layouts = [
+        PanelLayout("front", 20.0, 20.0, 160.0, 160.0, [Placement(front.id, 50.0, 50.0, 40.0, 40.0)]),
+        PanelLayout("back", 20.0, 20.0, 160.0, 160.0, [Placement(back.id, 50.0, 50.0, 40.0, 40.0)]),
+    ]
+
+    content = render_pdf([front, back], (200.0, 200.0), layouts, mirror=False, one_layout_per_page=True)
+
+    assert len(re.findall(rb"/Type\s*/Page\b", content)) == 2
