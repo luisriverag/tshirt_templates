@@ -350,11 +350,6 @@ def render_pdf(
             _draw_print_marks(pdf, page_width, page_height)
 
     def draw_layout(layout: PanelLayout) -> None:
-        pdf.setStrokeColor(colors.HexColor("#555555"))
-        pdf.setDash(5, 4)
-        pdf.roundRect(layout.x, layout.y, layout.width, layout.height, 12, stroke=1, fill=0)
-        pdf.setDash()
-
         _draw_panel_text(pdf, layout, panel_text)
         _draw_curve_guide(pdf, layout, curve_settings)
 
