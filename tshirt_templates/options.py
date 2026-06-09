@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Callable, Mapping
 
 DEFAULT_SIDES = ("front", "back")
@@ -14,7 +14,7 @@ VALID_LAYOUT_MODES = frozenset(
 )
 VALID_ORDER_MODES = frozenset({"selected", "alphabetical", "category"})
 VALID_UNITS = frozenset({"cm", "in"})
-VALID_TEXT_FONTS = frozenset({"ubuntu", "helvetica", "times", "courier", "dejavu"})
+VALID_TEXT_FONTS = frozenset({"ubuntu", "fredoka-one", "helvetica", "times", "courier", "dejavu"})
 VALID_CURVE_DEVICES = frozenset({"custom", "mug", "skinny-tumbler", "canteen"})
 MAX_PANEL_TEXT_LENGTH = 64
 CENTIMETERS_PER_INCH = 2.54
@@ -75,7 +75,7 @@ SPACING_AMOUNTS = {
     ),
 }
 LOGO_AMOUNTS = {
-    "cm": frozenset({"2.5", "3.5", "5.0", "7.5", "10.0", "12.5", "15.0"}),
+    "cm": frozenset({"2.5", "3.5", "5.0", "7.5", "10.0", "12.5", "15.0", "20.0", "25.0"}),
     "in": frozenset({"1.0", "1.4", "2.0", "3.0", "4.0", "5.0", "6.0"}),
 }
 
@@ -94,6 +94,7 @@ class LayoutOptions:
     page_margin: str = DEFAULT_PAGE_MARGIN_AMOUNTS[DEFAULT_UNIT]
     panel_gap: str = DEFAULT_PANEL_GAP_AMOUNTS[DEFAULT_UNIT]
     include_logo: bool = False
+    logo_sides: list[str] = field(default_factory=lambda: list(DEFAULT_SIDES))
     logo_size: str = DEFAULT_LOGO_AMOUNTS[DEFAULT_UNIT]
     front_logo_size: str = DEFAULT_LOGO_AMOUNTS[DEFAULT_UNIT]
     back_logo_size: str = DEFAULT_LOGO_AMOUNTS[DEFAULT_UNIT]
@@ -236,6 +237,7 @@ def parse_layout_options(
         page_margin=page_margin,
         panel_gap=panel_gap,
         include_logo=_truthy(values.get("include_logo")),
+        logo_sides=_valid_sides(getlist("logo_sides")),
         logo_size=logo_size,
         front_logo_size=front_logo_size,
         back_logo_size=back_logo_size,

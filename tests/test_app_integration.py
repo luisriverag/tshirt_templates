@@ -555,6 +555,7 @@ def test_api_health_options_and_badges(monkeypatch):
     assert options.json["defaults"]["page_margin"] == "1.25"
     assert options.json["defaults"]["panel_gap"] == "0.85"
     assert options.json["text_fonts"]["ubuntu"] == "Ubuntu"
+    assert options.json["text_fonts"]["fredoka-one"] == "Fredoka One"
     assert options.json["curve_device_options"]["mug"] == "Standard mug"
     assert options.json["curve_device_diameters"]["mug"]["cm"] == "8.2"
     assert options.json["logo_size_options"]["cm"]
@@ -712,6 +713,34 @@ def test_api_layout_preview_computes_json_layout_with_logo(monkeypatch):
     assert front_placements[0]["rotation"] == 12.0
     assert front_placements[-1]["width"] == 1.0
     assert back_placements[-1]["width"] == 3.0
+
+
+def test_api_layout_preview_can_limit_logo_to_one_side(monkeypatch):
+    monkeypatch.setattr("tshirt_templates.badges.list_badges", lambda: [DEMO_BADGE])
+    app = create_app()
+
+    response = app.test_client().post(
+        "/api/v1/layouts/preview",
+        json={
+            "badge_ids": [DEMO_BADGE.id],
+            "options": {
+                "sides": ["front", "back"],
+                "unit": "in",
+                "badge_size": "1.0",
+                "include_logo": True,
+                "logo_sides": ["front"],
+                "front_logo_size": "1.0",
+                "back_logo_size": "3.0",
+            },
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.json["options"]["logo_sides"] == ["front"]
+    front_placements = response.json["layouts"][0]["placements"]
+    back_placements = response.json["layouts"][1]["placements"]
+    assert [placement["badge_id"] for placement in front_placements] == [DEMO_BADGE.id, "makespace-logo"]
+    assert [placement["badge_id"] for placement in back_placements] == [DEMO_BADGE.id]
 
 
 def test_api_pdf_generates_pdf_from_json(monkeypatch):

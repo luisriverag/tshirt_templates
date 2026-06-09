@@ -71,6 +71,7 @@ UNITS = {
 }
 TEXT_FONTS = {
     "ubuntu": "Ubuntu",
+    "fredoka-one": "Fredoka One",
     "helvetica": "Helvetica",
     "times": "Times",
     "courier": "Courier",
@@ -148,12 +149,18 @@ def points_per_unit(unit: str) -> float:
 
 
 def append_logo_placements(
-    layouts: list[PanelLayout], logo_size_inches: float | dict[str, float]
+    layouts: list[PanelLayout],
+    logo_size_inches: float | dict[str, float],
+    logo_sides: list[str] | None = None,
 ) -> list[PanelLayout]:
-    """Append the optional MakeSpace logo placement to every panel layout."""
+    """Append the optional MakeSpace logo placement to selected panel layouts."""
 
+    selected_logo_sides = set(logo_sides or ["front", "back"])
     adjusted_layouts: list[PanelLayout] = []
     for layout in layouts:
+        if layout.side not in selected_logo_sides:
+            adjusted_layouts.append(layout)
+            continue
         side_logo_size_inches = (
             logo_size_inches.get(layout.side, logo_size_inches.get("default", 0.0))
             if isinstance(logo_size_inches, dict)
@@ -263,6 +270,7 @@ def options_payload() -> dict:
             "page_margin": DEFAULT_PAGE_MARGIN_AMOUNTS[DEFAULT_UNIT],
             "panel_gap": DEFAULT_PANEL_GAP_AMOUNTS[DEFAULT_UNIT],
             "include_logo": False,
+            "logo_sides": ["front", "back"],
             "logo_size": DEFAULT_LOGO_AMOUNTS[DEFAULT_UNIT],
             "front_logo_size": DEFAULT_LOGO_AMOUNTS[DEFAULT_UNIT],
             "back_logo_size": DEFAULT_LOGO_AMOUNTS[DEFAULT_UNIT],
@@ -881,6 +889,7 @@ def create_app() -> Flask:
             "sides": ",".join(options.sides),
             "mirror": str(options.mirror).lower(),
             "include_logo": str(options.include_logo).lower(),
+            "logo_sides": ",".join(options.logo_sides or []),
             "logo_size": options.logo_size,
             "front_logo_size": options.front_logo_size,
             "back_logo_size": options.back_logo_size,
@@ -922,6 +931,7 @@ def create_app() -> Flask:
                 "back": options.back_logo_size_inches,
                 "default": options.logo_size_inches,
             },
+            options.logo_sides,
         )
 
     def _apply_manual_placements(
@@ -1182,6 +1192,7 @@ def create_app() -> Flask:
                     "back": options.back_logo_size_inches,
                     "default": options.logo_size_inches,
                 },
+                options.logo_sides,
             )
         manual_placements = payload.get("manual_placements", [])
         if not isinstance(manual_placements, list):
@@ -1215,6 +1226,7 @@ def create_app() -> Flask:
                 "page_margin": options.page_margin,
                 "panel_gap": options.panel_gap,
                 "include_logo": options.include_logo,
+                "logo_sides": options.logo_sides,
                 "logo_size": options.logo_size,
                 "front_logo_size": options.front_logo_size,
                 "back_logo_size": options.back_logo_size,

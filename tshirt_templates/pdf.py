@@ -19,12 +19,20 @@ from reportlab.graphics import renderPDF
 from .badges import Badge
 from .layout import PanelLayout
 
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+
+
 FONT_FILES = {
     "ubuntu": [
         "/usr/share/fonts/truetype/ubuntu/Ubuntu-B.ttf",
         "/usr/share/fonts/truetype/ubuntu/Ubuntu-R.ttf",
     ],
     "dejavu": ["/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"],
+    "fredoka-one": [
+        str(PROJECT_ROOT / "static" / "fonts" / "FredokaOne-Regular.ttf"),
+        "/usr/share/fonts/truetype/fredoka-one/FredokaOne-Regular.ttf",
+        "/usr/share/fonts/truetype/fredoka/FredokaOne-Regular.ttf",
+    ],
 }
 BUILT_IN_FONTS = {
     "helvetica": "Helvetica-Bold",

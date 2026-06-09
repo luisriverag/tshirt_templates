@@ -19,7 +19,7 @@ The app discovers badge image assets from the GitHub repository, lets you select
   - **Border**: perimeter frame layout for collar/sleeve-style badge accents.
   - **M pixel shape**: pixel-art capital M that repeats the selected badges as mosaic pixels.
 - Configurable page size (A4 by default), page orientation, centimeter/inch units, page margin/panel gap controls, badge size presets, spacing presets with density-aware automatic shrinking for crowded grid/row layouts, copies per badge, mirroring, and panel selection, with invalid form values safely normalized and grouped into step-by-step controls plus a quick print guide.
-- Optional front/back panel text for names or short labels, with Ubuntu as the default font plus Helvetica, Times, Courier, and DejaVu Sans choices.
+- Optional front/back panel text for names or short labels, with Ubuntu as the default font plus Fredoka One, Helvetica, Times, Courier, and DejaVu Sans choices.
 - User uploads for additional SVG/PNG/JPG badge artwork stored under the Flask `instance/uploads/` folder, with browser and API replacement/deletion for saved uploads and validation notices for questionable image dimensions or invalid artwork.
 - Optional mirroring for sublimation transfer workflows plus badge cut-line outlines, crop/registration print marks, a mug/canteen curved-adapter effect with device presets and configurable diameter, and a calibration page with rulers/mirror warnings for alignment.
 - Optional MakeSpace Madrid logo element with configurable size.
