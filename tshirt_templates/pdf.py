@@ -323,6 +323,7 @@ def render_pdf(
     cut_lines: bool = False,
     curve_settings: dict[str, float] | None = None,
     metadata: dict[str, str] | None = None,
+    one_layout_per_page: bool = False,
 ) -> bytes:
     """Render selected badge layouts into a PDF byte string."""
 
@@ -341,14 +342,14 @@ def render_pdf(
         pdf.setSubject("; ".join(f"{key}={value}" for key, value in sorted(metadata.items())))
         pdf.setKeywords(", ".join(f"{key}:{value}" for key, value in sorted(metadata.items())))
 
-    if mirror:
-        pdf.translate(page_width, 0)
-        pdf.scale(-1, 1)
+    def setup_page() -> None:
+        if mirror:
+            pdf.translate(page_width, 0)
+            pdf.scale(-1, 1)
+        if print_marks:
+            _draw_print_marks(pdf, page_width, page_height)
 
-    if print_marks:
-        _draw_print_marks(pdf, page_width, page_height)
-
-    for layout in layouts:
+    def draw_layout(layout: PanelLayout) -> None:
         pdf.setStrokeColor(colors.HexColor("#555555"))
         pdf.setDash(5, 4)
         pdf.roundRect(layout.x, layout.y, layout.width, layout.height, 12, stroke=1, fill=0)
@@ -373,7 +374,14 @@ def render_pdf(
             pdf.rotate(curved_rotation)
             cached_asset = asset_cache.get(badge.id)
             if isinstance(cached_asset, Exception):
-                _draw_missing_badge(pdf, badge, -placement.width / 2, -placement.height / 2, placement.width, placement.height)
+                _draw_missing_badge(
+                    pdf,
+                    badge,
+                    -placement.width / 2,
+                    -placement.height / 2,
+                    placement.width,
+                    placement.height,
+                )
             else:
                 _draw_badge(
                     pdf,
@@ -388,6 +396,15 @@ def render_pdf(
                 _draw_cut_line(pdf, -placement.width / 2, -placement.height / 2, placement.width, placement.height)
             pdf.restoreState()
 
-    pdf.showPage()
+    if one_layout_per_page:
+        for layout in layouts:
+            setup_page()
+            draw_layout(layout)
+            pdf.showPage()
+    else:
+        setup_page()
+        for layout in layouts:
+            draw_layout(layout)
+        pdf.showPage()
     pdf.save()
     return buffer.getvalue()

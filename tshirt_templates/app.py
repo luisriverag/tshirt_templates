@@ -563,7 +563,9 @@ def create_app() -> Flask:
                 "Submit a JSON object with badge_ids, options, and optional manual_placements.",
                 400,
             )
-        options, render_badges, page_size, layouts = _json_layout_parts(payload)
+        options, render_badges, page_size, layouts = _json_layout_parts(
+            payload, separate_side_pages=True
+        )
         asset_failures = _pdf_asset_failures(render_badges)
         allow_partial = bool(payload.get("allow_partial"))
         if asset_failures and not allow_partial:
@@ -590,6 +592,7 @@ def create_app() -> Flask:
             cut_lines=options.include_cut_lines,
             curve_settings=_curve_settings(options),
             metadata=metadata,
+            one_layout_per_page=True,
         )
         headers = {"Content-Disposition": "attachment; filename=tshirt-badge-template.pdf"}
         if asset_failures:
@@ -656,7 +659,7 @@ def create_app() -> Flask:
     @app.post("/preview")
     def preview() -> str:
         badge_ids, badges, upload_warnings = _selected_badges_with_uploads()
-        page_size, layouts = _layout_from_form(badge_ids)
+        page_size, layouts = _layout_from_form(badge_ids, separate_side_pages=True)
         layouts = _append_logo_placements(layouts)
         layouts = _apply_manual_placements(layouts, page_size)
         return render_template(
@@ -699,7 +702,7 @@ def create_app() -> Flask:
     @app.post("/pdf")
     def pdf() -> Response:
         badge_ids, badges, _upload_warnings = _selected_badges_with_uploads()
-        page_size, layouts = _layout_from_form(badge_ids)
+        page_size, layouts = _layout_from_form(badge_ids, separate_side_pages=True)
         layouts = _append_logo_placements(layouts)
         layouts = _apply_manual_placements(layouts, page_size)
         asset_failures = _pdf_asset_failures(badges)
@@ -720,6 +723,7 @@ def create_app() -> Flask:
             cut_lines=options.include_cut_lines,
             curve_settings=_curve_settings(options),
             metadata=metadata,
+            one_layout_per_page=True,
         )
         headers = {"Content-Disposition": "attachment; filename=tshirt-badge-template.pdf"}
         if asset_failures:
@@ -736,16 +740,62 @@ def create_app() -> Flask:
     def _available_badges():
         return [*list_badges(), *list_uploaded_badges(_upload_folder())]
 
-    def _selected_badges_with_uploads() -> tuple[list[str], list, list]:
+    def _selected_badges_with_uploads() -> tuple[dict[str, list[str]], list, list]:
         upload_result = save_uploaded_badges_with_warnings(
             request.files.getlist("uploads"), _upload_folder()
         )
-        badge_ids = [*request.form.getlist("badges"), *[badge.id for badge in upload_result.badges]]
-        badges = get_badges_by_id(badge_ids, _upload_folder())
+        uploaded_ids = [badge.id for badge in upload_result.badges]
+        side_badge_ids = _side_badge_ids(uploaded_ids)
+        all_badge_ids = _unique_badge_ids(
+            badge_id for ids in side_badge_ids.values() for badge_id in ids
+        )
+        badge_lookup = {
+            badge.id: badge for badge in get_badges_by_id(all_badge_ids, _upload_folder())
+        }
         options = _layout_options()
-        ordered_badges = order_badges(badges, options.order)
-        render_badges = [*ordered_badges, LOGO_BADGE] if options.include_logo else ordered_badges
-        return [badge.id for badge in ordered_badges], render_badges, upload_result.warnings
+        ordered_side_badge_ids: dict[str, list[str]] = {}
+        for side, ids in side_badge_ids.items():
+            ordered_side_badge_ids[side] = [
+                badge.id
+                for badge in order_badges(
+                    [badge_lookup[badge_id] for badge_id in ids if badge_id in badge_lookup],
+                    options.order,
+                )
+            ]
+        ordered_render_ids = _unique_badge_ids(
+            badge_id for ids in ordered_side_badge_ids.values() for badge_id in ids
+        )
+        render_badges = [
+            badge_lookup[badge_id]
+            for badge_id in ordered_render_ids
+            if badge_id in badge_lookup
+        ]
+        if options.include_logo:
+            render_badges = [*render_badges, LOGO_BADGE]
+        return ordered_side_badge_ids, render_badges, upload_result.warnings
+
+    def _side_badge_ids(uploaded_ids: list[str]) -> dict[str, list[str]]:
+        front_ids = request.form.getlist("front_badges")
+        back_ids = request.form.getlist("back_badges")
+        legacy_ids = request.form.getlist("badges")
+        if not front_ids and not back_ids and legacy_ids:
+            front_ids = legacy_ids
+            back_ids = legacy_ids
+        front_ids = [*front_ids, *uploaded_ids]
+        back_ids = [*back_ids, *uploaded_ids]
+        return {
+            "front": _unique_badge_ids(front_ids),
+            "back": _unique_badge_ids(back_ids),
+        }
+
+    def _unique_badge_ids(ids) -> list[str]:
+        seen = set()
+        unique_ids = []
+        for badge_id in ids:
+            if badge_id and badge_id not in seen:
+                seen.add(badge_id)
+                unique_ids.append(badge_id)
+        return unique_ids
 
     def _layout_options():
         return parse_layout_options(request.form, request.form.getlist)
@@ -788,7 +838,9 @@ def create_app() -> Flask:
             "text_font": options.text_font,
         }
 
-    def _layout_from_form(badge_ids: list[str]):
+    def _layout_from_form(
+        badge_ids: dict[str, list[str]], separate_side_pages: bool = False
+    ):
         options = _layout_options()
         return place_badges(
             badge_ids=badge_ids,
@@ -801,6 +853,7 @@ def create_app() -> Flask:
             page_margin_inches=options.page_margin_inches,
             panel_gap_inches=options.panel_gap_inches,
             copies=options.copies,
+            separate_side_pages=separate_side_pages,
         )
 
     def _append_logo_placements(layouts: list[PanelLayout]) -> list[PanelLayout]:
@@ -1033,7 +1086,7 @@ def create_app() -> Flask:
             return None
         return path.stem
 
-    def _json_layout_parts(payload: dict):
+    def _json_layout_parts(payload: dict, separate_side_pages: bool = False):
         raw_options = payload.get("options", {})
         if not isinstance(raw_options, dict):
             raw_options = {}
@@ -1057,6 +1110,7 @@ def create_app() -> Flask:
             page_margin_inches=options.page_margin_inches,
             panel_gap_inches=options.panel_gap_inches,
             copies=options.copies,
+            separate_side_pages=separate_side_pages,
         )
         if options.include_logo:
             layouts = append_logo_placements(layouts, options.logo_size_inches)
@@ -1069,7 +1123,9 @@ def create_app() -> Flask:
         return options, render_badges, page_size, layouts
 
     def _layout_from_json(payload: dict) -> dict:
-        options, render_badges, page_size, layouts = _json_layout_parts(payload)
+        options, render_badges, page_size, layouts = _json_layout_parts(
+            payload, separate_side_pages=True
+        )
         divisor = points_per_unit(options.unit)
         return {
             "page": {
@@ -1262,7 +1318,9 @@ def create_app() -> Flask:
         }
 
     def _mcp_render_pdf(arguments: dict) -> dict:
-        options, render_badges, page_size, layouts = _json_layout_parts(arguments)
+        options, render_badges, page_size, layouts = _json_layout_parts(
+            arguments, separate_side_pages=True
+        )
         requested_ids = [str(badge_id) for badge_id in arguments.get("badge_ids", []) if str(badge_id)]
         render_badge_ids = [badge.id for badge in render_badges]
         resolved_ids = set(render_badge_ids)
@@ -1327,6 +1385,7 @@ def create_app() -> Flask:
             cut_lines=options.include_cut_lines,
             curve_settings=_curve_settings(options),
             metadata=metadata,
+            one_layout_per_page=True,
         )
         encoded = base64.b64encode(content).decode("ascii")
         return {

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from math import ceil, cos, pi, radians, sin, sqrt
 from random import Random
@@ -63,6 +63,7 @@ def compute_panels(
     sides: list[str],
     page_margin: float = PANEL_MARGIN,
     panel_gap: float = 24.0,
+    separate_side_pages: bool = False,
 ) -> dict[str, tuple[float, float, float, float]]:
     """Return front/back panel rectangles for the selected sides."""
 
@@ -76,8 +77,8 @@ def compute_panels(
     content_width = page_width - 2 * safe_margin
     content_height = page_height - 2 * safe_margin
 
-    if len(selected) == 1:
-        return {selected[0]: (content_x, content_y, content_width, content_height)}
+    if len(selected) == 1 or separate_side_pages:
+        return {side: (content_x, content_y, content_width, content_height) for side in selected}
 
     gap = min(max(0.0, panel_gap), max(0.0, content_width - 2.0))
     panel_width = (content_width - gap) / 2
@@ -492,7 +493,7 @@ def _m_pixel_positions(
 
 
 def place_badges(
-    badge_ids: list[str],
+    badge_ids: list[str] | Mapping[str, list[str]],
     sides: list[str],
     page_size: str = "a4",
     mode: str = "grid",
@@ -502,6 +503,7 @@ def place_badges(
     page_margin_inches: float = 0.5,
     panel_gap_inches: float = 24.0 / POINTS_PER_INCH,
     copies: int = 1,
+    separate_side_pages: bool = False,
 ) -> tuple[tuple[float, float], list[PanelLayout]]:
     """Compute printable panel layouts for selected badges."""
 
@@ -510,8 +512,19 @@ def place_badges(
     spacing = max(0.0, min(spacing_inches, 2.0)) * POINTS_PER_INCH
     page_margin = max(0.0, min(page_margin_inches, 2.0)) * POINTS_PER_INCH
     panel_gap = max(0.0, min(panel_gap_inches, 4.0)) * POINTS_PER_INCH
-    expanded_ids = expand_badges(badge_ids, copies)
-    panels = compute_panels(page_width, page_height, sides, page_margin, panel_gap)
+    badges_by_side = (
+        {side: list(badge_ids.get(side, [])) for side in sides}
+        if isinstance(badge_ids, Mapping)
+        else {side: list(badge_ids) for side in sides}
+    )
+    panels = compute_panels(
+        page_width,
+        page_height,
+        sides,
+        page_margin,
+        panel_gap,
+        separate_side_pages=separate_side_pages,
+    )
     placers = {
         "grid": _grid_positions,
         "rows": _rows_positions,
@@ -528,6 +541,7 @@ def place_badges(
     layouts = []
     density_fitters = {"grid": _grid_fits, "rows": _rows_fits}
     for side, panel in panels.items():
+        expanded_ids = expand_badges(badges_by_side.get(side, []), copies)
         panel_spacing = (
             _density_aware_spacing(
                 expanded_ids,
