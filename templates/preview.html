@@ -60,7 +60,12 @@
               <text x="{{ layout.x + 10 }}" y="{{ page_height - layout.y - layout.height + 22 }}" class="panel-title">{{ layout.side|upper }}</text>
               {% set panel_text = form.get(layout.side ~ '_text', '') %}
               {% if panel_text %}
-                <text x="{{ layout.x + layout.width / 2 }}" y="{{ page_height - layout.y - 18 }}" class="panel-custom-text" font-family="{{ form.get('text_font', 'ubuntu')|replace('-', ' ') }}, Ubuntu, Helvetica, Arial, sans-serif" font-size="28">{{ panel_text }}</text>
+                {% set text_x = (form.get(layout.side ~ '_text_x')|float if form.get(layout.side ~ '_text_x') else (layout.x + layout.width / 2) / points_per_unit) * points_per_unit %}
+                {% set text_y = (form.get(layout.side ~ '_text_y')|float if form.get(layout.side ~ '_text_y') else (page_height - layout.y - 18) / points_per_unit) * points_per_unit %}
+                <g class="draggable-panel-text" tabindex="0" role="button" aria-label="Move {{ layout.side }} text" data-side="{{ layout.side }}" data-x="{{ text_x }}" data-y="{{ text_y }}">
+                  <text x="{{ text_x }}" y="{{ text_y }}" class="panel-custom-text" font-family="{{ form.get('text_font', 'ubuntu')|replace('-', ' ') }}, Ubuntu, Helvetica, Arial, sans-serif" font-size="28">{{ panel_text }}</text>
+                  <rect class="text-selection-outline" x="{{ text_x - 120 }}" y="{{ text_y - 32 }}" width="240" height="42" rx="8"/>
+                </g>
               {% endif %}
               {% for placement in layout.placements %}
                 {% set placement_index = loop.index0 %}
@@ -121,6 +126,28 @@
             <button type="button" class="secondary-button rotation-preset" data-rotation="90">Rotate 90°</button>
             <button type="button" class="secondary-button rotation-preset" data-rotation="-45">Rotate -45°</button>
           </div>
+          {% set has_panel_text = form.get('front_text') or form.get('back_text') %}
+          {% if has_panel_text %}
+            <div class="manual-text-tools" aria-label="Manual text placement">
+              <h3>Inserted text position</h3>
+              <p class="hint">Drag inserted front/back text in the preview, or type coordinates here.</p>
+              <div class="control-grid">
+                {% for layout in layouts %}
+                  {% set panel_text = form.get(layout.side ~ '_text', '') %}
+                  {% if panel_text %}
+                    {% set text_x = form.get(layout.side ~ '_text_x') or '%.2f'|format((layout.x + layout.width / 2) / points_per_unit) %}
+                    {% set text_y = form.get(layout.side ~ '_text_y') or '%.2f'|format((page_height - layout.y - 18) / points_per_unit) %}
+                    <label>{{ layout.side|title }} text X
+                      <input class="text-manual-input" data-field="x" data-side="{{ layout.side }}" type="number" name="{{ layout.side }}_text_x" step="0.01" value="{{ text_x }}">
+                    </label>
+                    <label>{{ layout.side|title }} text Y
+                      <input class="text-manual-input" data-field="y" data-side="{{ layout.side }}" type="number" name="{{ layout.side }}_text_y" step="0.01" value="{{ text_y }}">
+                    </label>
+                  {% endif %}
+                {% endfor %}
+              </div>
+            </div>
+          {% endif %}
           <div class="manual-tools alignment-tools" aria-label="Panel alignment tools">
             <button type="button" class="secondary-button alignment-tool" data-alignment="left">Align left</button>
             <button type="button" class="secondary-button alignment-tool" data-alignment="center-horizontal">Center horizontally</button>
@@ -164,7 +191,7 @@
           </div>
         </section>
 
-        {% for key in ['page_size', 'orientation', 'mode', 'order', 'unit', 'badge_size', 'spacing', 'page_margin', 'panel_gap', 'include_logo', 'logo_size', 'copies', 'mirror', 'include_print_marks', 'include_cut_lines', 'include_curve_effect', 'curve_device', 'curve_diameter', 'front_text', 'back_text', 'text_font'] %}
+        {% for key in ['page_size', 'orientation', 'mode', 'order', 'unit', 'badge_size', 'spacing', 'page_margin', 'panel_gap', 'include_logo', 'logo_size', 'front_logo_size', 'back_logo_size', 'copies', 'mirror', 'include_print_marks', 'include_cut_lines', 'include_curve_effect', 'curve_device', 'curve_diameter', 'front_text', 'back_text', 'text_font'] %}
           {% if form.get(key) %}<input type="hidden" name="{{ key }}" value="{{ form.get(key) }}">{% endif %}
         {% endfor %}
         {% for side in form.getlist('sides') %}<input type="hidden" name="sides" value="{{ side }}">{% endfor %}
@@ -190,6 +217,7 @@
       const inputs = new Map();
       let selectedBadge = null;
       const selectedBadges = new Set();
+      const textInputs = new Map();
       function decimalPlaces(value) {
         const text = String(value || '1');
         if (text.includes('e-')) return Number(text.split('e-')[1]);
@@ -220,6 +248,18 @@
         input.addEventListener('change', () => {
           normalizeNumberInput(input);
           updateBadgeFromInputs(key);
+        });
+      });
+
+      document.querySelectorAll('.text-manual-input').forEach((input) => {
+        const side = input.dataset.side;
+        if (!textInputs.has(side)) textInputs.set(side, {});
+        textInputs.get(side)[input.dataset.field] = input;
+        input.dataset.initial = input.value;
+        input.addEventListener('input', () => updatePanelTextFromInputs(side));
+        input.addEventListener('change', () => {
+          normalizeNumberInput(input);
+          updatePanelTextFromInputs(side);
         });
       });
 
@@ -255,6 +295,35 @@
 
       function setStatus(message) {
         status.textContent = message;
+      }
+
+      function setPanelTextPosition(textGroup, x, y) {
+        textGroup.dataset.x = x;
+        textGroup.dataset.y = y;
+        const text = textGroup.querySelector('text');
+        const outline = textGroup.querySelector('.text-selection-outline');
+        text.setAttribute('x', x);
+        text.setAttribute('y', y);
+        outline.setAttribute('x', x - Number(outline.getAttribute('width')) / 2);
+        outline.setAttribute('y', y - 32);
+      }
+
+      function updatePanelTextInputs(textGroup) {
+        const group = textInputs.get(textGroup.dataset.side);
+        if (!group) return;
+        group.x.value = (Number(textGroup.dataset.x) / pointsPerUnit).toFixed(2);
+        group.y.value = (Number(textGroup.dataset.y) / pointsPerUnit).toFixed(2);
+      }
+
+      function updatePanelTextFromInputs(side) {
+        const textGroup = document.querySelector(`.draggable-panel-text[data-side="${side}"]`);
+        const group = textInputs.get(side);
+        if (!textGroup || !group) return;
+        setPanelTextPosition(
+          textGroup,
+          (Number(group.x.value) || 0) * pointsPerUnit,
+          (Number(group.y.value) || 0) * pointsPerUnit
+        );
       }
 
       function allBadges() {
@@ -426,6 +495,33 @@
       }
 
       let drag = null;
+      let textDrag = null;
+      document.querySelectorAll('.draggable-panel-text').forEach((textGroup) => {
+        textGroup.addEventListener('pointerdown', (event) => {
+          event.preventDefault();
+          const currentSvg = textGroup.ownerSVGElement;
+          const point = svgPoint(event, currentSvg);
+          textDrag = {
+            textGroup,
+            offsetX: point.x - Number(textGroup.dataset.x),
+            offsetY: point.y - Number(textGroup.dataset.y),
+            svg: currentSvg,
+          };
+          textGroup.setPointerCapture(event.pointerId);
+          textGroup.classList.add('dragging');
+        });
+        textGroup.addEventListener('keydown', (event) => {
+          if (!['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(event.key)) return;
+          event.preventDefault();
+          const step = (event.shiftKey ? 1 : 0.1) * pointsPerUnit;
+          const deltaX = event.key === 'ArrowLeft' ? -step : event.key === 'ArrowRight' ? step : 0;
+          const deltaY = event.key === 'ArrowUp' ? -step : event.key === 'ArrowDown' ? step : 0;
+          setPanelTextPosition(textGroup, Number(textGroup.dataset.x) + deltaX, Number(textGroup.dataset.y) + deltaY);
+          updatePanelTextInputs(textGroup);
+          setStatus(`${textGroup.dataset.side} text nudged with keyboard.`);
+        });
+      });
+
       document.querySelectorAll('.draggable-badge').forEach((badge) => {
         badge.addEventListener('pointerdown', (event) => {
           event.preventDefault();
@@ -458,6 +554,12 @@
 
       previewSvgs.forEach((previewSvg) => {
         previewSvg.addEventListener('pointermove', (event) => {
+          if (textDrag && textDrag.svg === previewSvg) {
+            const point = svgPoint(event, previewSvg);
+            setPanelTextPosition(textDrag.textGroup, point.x - textDrag.offsetX, point.y - textDrag.offsetY);
+            updatePanelTextInputs(textDrag.textGroup);
+            return;
+          }
           if (!drag || drag.svg !== previewSvg) return;
           const point = svgPoint(event, previewSvg);
           const { x, y } = snapBadgePosition(drag.badge, point.x - drag.offsetX, point.y - drag.offsetY);
@@ -470,6 +572,12 @@
         });
 
         previewSvg.addEventListener('pointerup', () => {
+          if (textDrag && textDrag.svg === previewSvg) {
+            textDrag.textGroup.classList.remove('dragging');
+            setStatus(`${textDrag.textGroup.dataset.side} text moved. Coordinates updated below.`);
+            textDrag = null;
+            return;
+          }
           if (!drag || drag.svg !== previewSvg) return;
           drag.badges.forEach((item) => item.badge.classList.remove('dragging'));
           setStatus(`${drag.badges.length} badge${drag.badges.length === 1 ? '' : 's'} moved. Coordinates updated below.`);
@@ -501,12 +609,13 @@
       });
 
       document.querySelector('#manual-layout-form').addEventListener('submit', () => {
-        document.querySelectorAll('.manual-input').forEach(normalizeNumberInput);
+        document.querySelectorAll('.manual-input, .text-manual-input').forEach(normalizeNumberInput);
       });
 
       document.querySelector('#reset-manual-layout').addEventListener('click', () => {
-        document.querySelectorAll('.manual-input').forEach((input) => { input.value = input.dataset.initial; });
+        document.querySelectorAll('.manual-input, .text-manual-input').forEach((input) => { input.value = input.dataset.initial; });
         inputs.forEach((_, key) => updateBadgeFromInputs(key));
+        textInputs.forEach((_, side) => updatePanelTextFromInputs(side));
         setStatus('Manual edits reset to the automatic layout.');
       });
 

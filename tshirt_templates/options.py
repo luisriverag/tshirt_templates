@@ -94,11 +94,15 @@ class LayoutOptions:
     panel_gap: str = DEFAULT_PANEL_GAP_AMOUNTS[DEFAULT_UNIT]
     include_logo: bool = False
     logo_size: str = DEFAULT_LOGO_AMOUNTS[DEFAULT_UNIT]
+    front_logo_size: str = DEFAULT_LOGO_AMOUNTS[DEFAULT_UNIT]
+    back_logo_size: str = DEFAULT_LOGO_AMOUNTS[DEFAULT_UNIT]
     badge_size_inches: float = 3.5 / CENTIMETERS_PER_INCH
     spacing_inches: float = 0.5 / CENTIMETERS_PER_INCH
     page_margin_inches: float = 1.25 / CENTIMETERS_PER_INCH
     panel_gap_inches: float = 0.85 / CENTIMETERS_PER_INCH
     logo_size_inches: float = 5.0 / CENTIMETERS_PER_INCH
+    front_logo_size_inches: float = 5.0 / CENTIMETERS_PER_INCH
+    back_logo_size_inches: float = 5.0 / CENTIMETERS_PER_INCH
     copies: int = 1
     order: str = "selected"
     mirror: bool = True
@@ -191,6 +195,12 @@ def parse_layout_options(
     logo_size = _valid_unit_amount(
         values.get("logo_size"), LOGO_AMOUNTS, DEFAULT_LOGO_AMOUNTS, unit
     )
+    front_logo_size = _valid_unit_amount(
+        values.get("front_logo_size", logo_size), LOGO_AMOUNTS, DEFAULT_LOGO_AMOUNTS, unit
+    )
+    back_logo_size = _valid_unit_amount(
+        values.get("back_logo_size", logo_size), LOGO_AMOUNTS, DEFAULT_LOGO_AMOUNTS, unit
+    )
     page_margin = _safe_positive_amount(
         values.get("page_margin"),
         DEFAULT_PAGE_MARGIN_AMOUNTS[unit],
@@ -224,11 +234,15 @@ def parse_layout_options(
         panel_gap=panel_gap,
         include_logo=_truthy(values.get("include_logo")),
         logo_size=logo_size,
+        front_logo_size=front_logo_size,
+        back_logo_size=back_logo_size,
         badge_size_inches=_unit_amount_inches(badge_size, unit),
         spacing_inches=_unit_amount_inches(spacing, unit),
         page_margin_inches=_unit_amount_inches(page_margin, unit),
         panel_gap_inches=_unit_amount_inches(panel_gap, unit),
         logo_size_inches=_unit_amount_inches(logo_size, unit),
+        front_logo_size_inches=_unit_amount_inches(front_logo_size, unit),
+        back_logo_size_inches=_unit_amount_inches(back_logo_size, unit),
         copies=_safe_int(values.get("copies"), 1, 1, 24),
         order=_valid_choice(values.get("order"), VALID_ORDER_MODES, "selected"),
         mirror=_truthy(values.get("mirror"), default=True),

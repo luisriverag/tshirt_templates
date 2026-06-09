@@ -212,7 +212,10 @@ def _draw_panel_text(
     pdf.saveState()
     pdf.setFillColor(colors.HexColor("#111111"))
     pdf.setFont(font_name, font_size)
-    pdf.drawCentredString(layout.x + layout.width / 2, layout.y + 16, text)
+    position = (panel_text.get("positions") or {}).get(layout.side, {})
+    x = float(position.get("x", layout.x + layout.width / 2))
+    y = float(position.get("y", layout.y + 16))
+    pdf.drawCentredString(x, y, text)
     pdf.restoreState()
 
 

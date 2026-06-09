@@ -130,12 +130,19 @@ def points_per_unit(unit: str) -> float:
     return 72.0
 
 
-def append_logo_placements(layouts: list[PanelLayout], logo_size_inches: float) -> list[PanelLayout]:
+def append_logo_placements(
+    layouts: list[PanelLayout], logo_size_inches: float | dict[str, float]
+) -> list[PanelLayout]:
     """Append the optional MakeSpace logo placement to every panel layout."""
 
-    logo_size = logo_size_inches * 72.0
     adjusted_layouts: list[PanelLayout] = []
     for layout in layouts:
+        side_logo_size_inches = (
+            logo_size_inches.get(layout.side, logo_size_inches.get("default", 0.0))
+            if isinstance(logo_size_inches, dict)
+            else logo_size_inches
+        )
+        logo_size = side_logo_size_inches * 72.0
         width = min(logo_size, layout.width)
         height = min(logo_size, layout.height)
         margin = min(18.0, max(0.0, (layout.height - height) / 2))
@@ -240,6 +247,8 @@ def options_payload() -> dict:
             "panel_gap": DEFAULT_PANEL_GAP_AMOUNTS[DEFAULT_UNIT],
             "include_logo": False,
             "logo_size": DEFAULT_LOGO_AMOUNTS[DEFAULT_UNIT],
+            "front_logo_size": DEFAULT_LOGO_AMOUNTS[DEFAULT_UNIT],
+            "back_logo_size": DEFAULT_LOGO_AMOUNTS[DEFAULT_UNIT],
             "copies": 1,
             "order": "selected",
             "sides": ["front", "back"],
@@ -587,7 +596,7 @@ def create_app() -> Flask:
             page_size,
             layouts,
             mirror=options.mirror,
-            panel_text=_panel_text_options(options),
+            panel_text=_panel_text_options(options, page_size[1]),
             print_marks=options.include_print_marks,
             cut_lines=options.include_cut_lines,
             curve_settings=_curve_settings(options),
@@ -718,7 +727,7 @@ def create_app() -> Flask:
             page_size,
             layouts,
             mirror=options.mirror,
-            panel_text=_panel_text_options(options),
+            panel_text=_panel_text_options(options, page_size[1]),
             print_marks=options.include_print_marks,
             cut_lines=options.include_cut_lines,
             curve_settings=_curve_settings(options),
@@ -800,12 +809,31 @@ def create_app() -> Flask:
     def _layout_options():
         return parse_layout_options(request.form, request.form.getlist)
 
-    def _panel_text_options(options) -> dict[str, str]:
-        return {
+    def _panel_text_options(options, page_height: float | None = None) -> dict[str, str | dict]:
+        panel_text: dict[str, str | dict] = {
             "front": options.front_text,
             "back": options.back_text,
             "font": options.text_font,
         }
+        positions = _manual_panel_text_positions(page_height)
+        if positions:
+            panel_text["positions"] = positions
+        return panel_text
+
+    def _manual_panel_text_positions(page_height: float | None) -> dict[str, dict[str, float]]:
+        if page_height is None:
+            return {}
+        points_per_unit = _points_per_unit(_layout_options().unit)
+        positions: dict[str, dict[str, float]] = {}
+        for side in ("front", "back"):
+            manual_x = request.form.get(f"{side}_text_x")
+            manual_y = request.form.get(f"{side}_text_y")
+            if manual_x is None or manual_y is None:
+                continue
+            x = _manual_coordinate_points(manual_x, 0.0, points_per_unit)
+            preview_y = _manual_coordinate_points(manual_y, 0.0, points_per_unit)
+            positions[side] = {"x": x, "y": page_height - preview_y}
+        return positions
 
     def _curve_settings(options) -> dict[str, float] | None:
         if not options.include_curve_effect:
@@ -830,6 +858,9 @@ def create_app() -> Flask:
             "sides": ",".join(options.sides),
             "mirror": str(options.mirror).lower(),
             "include_logo": str(options.include_logo).lower(),
+            "logo_size": options.logo_size,
+            "front_logo_size": options.front_logo_size,
+            "back_logo_size": options.back_logo_size,
             "include_print_marks": str(options.include_print_marks).lower(),
             "include_cut_lines": str(options.include_cut_lines).lower(),
             "include_curve_effect": str(options.include_curve_effect).lower(),
@@ -860,7 +891,14 @@ def create_app() -> Flask:
         options = _layout_options()
         if not options.include_logo:
             return layouts
-        return append_logo_placements(layouts, options.logo_size_inches)
+        return append_logo_placements(
+            layouts,
+            {
+                "front": options.front_logo_size_inches,
+                "back": options.back_logo_size_inches,
+                "default": options.logo_size_inches,
+            },
+        )
 
     def _apply_manual_placements(
         layouts: list[PanelLayout], page_size: tuple[float, float]
@@ -1113,7 +1151,14 @@ def create_app() -> Flask:
             separate_side_pages=separate_side_pages,
         )
         if options.include_logo:
-            layouts = append_logo_placements(layouts, options.logo_size_inches)
+            layouts = append_logo_placements(
+                layouts,
+                {
+                    "front": options.front_logo_size_inches,
+                    "back": options.back_logo_size_inches,
+                    "default": options.logo_size_inches,
+                },
+            )
         manual_placements = payload.get("manual_placements", [])
         if not isinstance(manual_placements, list):
             manual_placements = []
@@ -1147,6 +1192,8 @@ def create_app() -> Flask:
                 "panel_gap": options.panel_gap,
                 "include_logo": options.include_logo,
                 "logo_size": options.logo_size,
+                "front_logo_size": options.front_logo_size,
+                "back_logo_size": options.back_logo_size,
                 "copies": options.copies,
                 "order": options.order,
                 "sides": options.sides,
@@ -1380,7 +1427,7 @@ def create_app() -> Flask:
             page_size,
             layouts,
             mirror=options.mirror,
-            panel_text=_panel_text_options(options),
+            panel_text=_panel_text_options(options, page_size[1]),
             print_marks=options.include_print_marks,
             cut_lines=options.include_cut_lines,
             curve_settings=_curve_settings(options),
