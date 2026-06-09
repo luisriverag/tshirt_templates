@@ -25,6 +25,7 @@ from .options import (
     DEFAULT_PAGE_MARGIN_AMOUNTS,
     DEFAULT_PANEL_GAP_AMOUNTS,
     DEFAULT_SPACING_AMOUNTS,
+    DEFAULT_TEXT_SIZE,
     DEFAULT_UNIT,
     LOGO_AMOUNTS,
     SPACING_AMOUNTS,
@@ -108,6 +109,22 @@ MCP_PORT_NOTE = (
     "MCP compatibility depends on configuring clients with the reachable /mcp URL; "
     "there is no required MCP port. Use --port only to avoid conflicts or expose the server."
 )
+
+
+MANUAL_SELECTION_BADGE_FILENAMES = {"badge-template.png"}
+
+
+def is_manual_selection_badge(badge: Badge) -> bool:
+    """Return True for catalog badges that should not be auto-selected."""
+
+    filename = badge.path.rsplit("/", 1)[-1].lower()
+    return filename in MANUAL_SELECTION_BADGE_FILENAMES
+
+
+def default_selected_badge_ids(badges: list[Badge]) -> list[str]:
+    """Return badge ids selected on first page load."""
+
+    return [badge.id for badge in badges if not is_manual_selection_badge(badge)]
 
 
 LOGO_BADGE = Badge(
@@ -261,6 +278,7 @@ def options_payload() -> dict:
             "front_text": "",
             "back_text": "",
             "text_font": "ubuntu",
+            "text_size": DEFAULT_TEXT_SIZE,
         },
     }
 
@@ -406,12 +424,14 @@ def create_app() -> Flask:
     @app.get("/")
     def index() -> str:
         badges = _available_badges()
-        selected_ids = [badge.id for badge in badges]
+        selected_ids = default_selected_badge_ids(badges)
+        manual_selection_ids = [badge.id for badge in badges if is_manual_selection_badge(badge)]
         return render_template(
             "index.html",
             badges=badges,
             badge_categories=sorted({badge_category(badge) for badge in badges}),
             selected_ids=selected_ids,
+            manual_selection_ids=manual_selection_ids,
             modes=LAYOUT_MODES,
             page_sizes=PAGE_SIZES,
             orientations=ORIENTATIONS,
@@ -431,6 +451,7 @@ def create_app() -> Flask:
             logo_size_options=LOGO_SIZE_OPTIONS,
             copy_options=COPY_OPTIONS,
             text_fonts=TEXT_FONTS,
+            default_text_size=DEFAULT_TEXT_SIZE,
             upload_messages=get_flashed_messages(),
         )
 
@@ -682,6 +703,7 @@ def create_app() -> Flask:
             selected_ids=badge_ids,
             unit=_layout_options().unit,
             points_per_unit=_points_per_unit(_layout_options().unit),
+            text_size=_layout_options().text_size,
             upload_warnings=upload_warnings_to_dicts(upload_warnings),
         )
 
@@ -814,6 +836,7 @@ def create_app() -> Flask:
             "front": options.front_text,
             "back": options.back_text,
             "font": options.text_font,
+            "size": options.text_size,
         }
         positions = _manual_panel_text_positions(page_height)
         if positions:
@@ -867,6 +890,7 @@ def create_app() -> Flask:
             "curve_device": options.curve_device,
             "curve_diameter": options.curve_diameter,
             "text_font": options.text_font,
+            "text_size": options.text_size,
         }
 
     def _layout_from_form(
@@ -1206,6 +1230,7 @@ def create_app() -> Flask:
                 "front_text": options.front_text,
                 "back_text": options.back_text,
                 "text_font": options.text_font,
+                "text_size": options.text_size,
             },
         }
 

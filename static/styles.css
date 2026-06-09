@@ -32,11 +32,6 @@ h2 { margin: 0 0 18px; color: var(--primary-color); text-transform: uppercase; l
 .quick-start { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 12px; margin: 22px 0 0; }
 .step-card { background: var(--secondary-color); color: var(--text-color); border: 2px solid var(--secondary-color); border-radius: var(--border-radius); padding: 14px; box-shadow: 4px 4px 0 rgba(0,0,0,.22); }
 .step-card strong { display: block; color: var(--primary-color); margin-bottom: 4px; text-transform: uppercase; }
-.quick-guide { margin-top: 22px; }
-.guide-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 14px; }
-.guide-cards article { border: 1px solid var(--line-color); border-radius: var(--border-radius); padding: 14px; background: rgba(0,0,0,.2); }
-.guide-cards strong { display: block; color: var(--primary-color); margin-bottom: 6px; text-transform: uppercase; }
-.guide-cards p { margin: 0; color: #cfcfbd; font-weight: 700; }
 .generator { display: grid; gap: 22px; margin-top: 22px; }
 .panel { background: var(--bg-color); border: 2px solid var(--line-color); border-radius: var(--border-radius); padding: 24px; box-shadow: 8px 8px 0 var(--secondary-color); }
 .controls { border-color: var(--primary-color); }
@@ -128,7 +123,8 @@ button:hover { transform: translate(-2px, -2px); box-shadow: 6px 6px 0 var(--sec
 .panel-title { font: 700 13px "Courier New", monospace; fill: #333; }
 .page-preview.high-contrast .panel-title { fill: #000; font-weight: 900; }
 .panel-custom-text { fill: #111; font-weight: 800; text-anchor: middle; pointer-events: none; }
-.draggable-panel-text { cursor: grab; outline: none; }
+.draggable-panel-text { cursor: grab; outline: none; touch-action: none; }
+.panel-text-hit-area { fill: transparent; pointer-events: all; }
 .draggable-panel-text.dragging { cursor: grabbing; }
 .text-selection-outline { display: none; fill: rgba(255, 255, 0, .18); stroke: #111; stroke-width: 2; stroke-dasharray: 7 4; pointer-events: none; }
 .draggable-panel-text:focus .text-selection-outline,

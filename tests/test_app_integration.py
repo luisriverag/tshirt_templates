@@ -31,15 +31,16 @@ def test_index_renders_badge_picker(monkeypatch):
     assert b"AutoPlot badges into t-shirts &amp; mugs" in response.data
     assert b"Generate front & back t-shirt badge PDF templates" not in response.data
     assert b'class="brand-mark"' in response.data
+    assert b'href="https://makespacemadrid.org/assets/images/favicon.png"' in response.data
     assert b"Template workflow" in response.data
     assert b"1. Page and layout" in response.data
     assert b"2. Badge size and labels" in response.data
     assert b"3. PDF output" in response.data
     assert b"Download calibration page" in response.data
-    assert b"Quick print guide" in response.data
-    assert b"Mirror transfers" in response.data
-    assert b"Leave cut spacing" in response.data
-    assert b"Measure curves" in response.data
+    assert b"Quick print guide" not in response.data
+    assert b"Mirror transfers" not in response.data
+    assert b"Leave cut spacing" not in response.data
+    assert b"Measure curves" not in response.data
     assert b'href="/calibration.pdf"' in response.data
     assert b"M pixel shape" in response.data
     assert b"Circle wreath" in response.data
@@ -59,7 +60,7 @@ def test_index_renders_badge_picker(monkeypatch):
     assert b"Include MakeSpace logo" in response.data
     assert b"Logo size" in response.data
     assert b"Badge order" in response.data
-    assert b"All badges are selected by default" in response.data
+    assert b"Badges are selected by default for both sides, except badge-template.png" in response.data
     assert b"selected-badge-count" in response.data
     assert b"both-badge-count" in response.data
     assert b"side-selection-notice" in response.data
@@ -81,6 +82,9 @@ def test_index_renders_badge_picker(monkeypatch):
     assert b'data-category="uncategorized"' in response.data
     assert b"Front text" in response.data
     assert b"Back text" in response.data
+    assert b"Text size" in response.data
+    assert b'id="text-size-input" min="8" max="72" step="1" value="28"' in response.data
+    assert b"Font for front/back panel labels." in response.data
     assert b"Ubuntu" in response.data
     assert b"Alphabetical" in response.data
     assert b"By category" in response.data
@@ -97,6 +101,30 @@ def test_index_renders_badge_picker(monkeypatch):
     assert b"curveDiameterInput.min = unit === 'cm' ? '2.5' : '1'" in response.data
     assert b"Demo Badge" in response.data
 
+
+
+def test_index_leaves_badge_template_manual_only(monkeypatch):
+    template_badge = Badge(
+        id="badge-template.png",
+        name="Badge Template",
+        path="badge-template.png",
+        raw_url="/static/badge-template.png",
+        extension=".png",
+    )
+    monkeypatch.setattr("tshirt_templates.app.list_badges", lambda: [DEMO_BADGE, template_badge])
+    app = create_app()
+
+    response = app.test_client().get("/")
+
+    assert response.status_code == 200
+    assert b'id="front-badge-count">1</span>' in response.data
+    assert b'id="back-badge-count">1</span>' in response.data
+    assert b'data-path="badge-template.png" data-category="uncategorized" data-manual-only="true"' in response.data
+    template_card = response.data.split(b'data-path="badge-template.png"', 1)[1].split(b'</article>', 1)[0]
+    assert b'value="badge-template.png"' in template_card
+    assert b'checked' not in template_card
+    assert b'Not printed' in template_card
+    assert b"card.dataset.manualOnly === 'true'" in response.data
 
 def test_index_renders_delete_button_for_uploaded_badges(monkeypatch, tmp_path):
     monkeypatch.setattr("tshirt_templates.app.list_badges", lambda: [])
@@ -188,6 +216,7 @@ def test_preview_renders_selected_layout(monkeypatch):
             "front_text": "Ada",
             "back_text": "MakeSpace",
             "text_font": "dejavu",
+            "text_size": "36",
             "include_cut_lines": "on",
         },
     )
@@ -203,6 +232,7 @@ def test_preview_renders_selected_layout(monkeypatch):
     assert b"highContrastPreview" in response.data
     assert b'class="brand-mark"' in response.data
     assert b'viewBox="0 0 792.0 612.0"' in response.data
+    assert b'href="https://makespacemadrid.org/assets/images/favicon.png"' in response.data
     assert b'name="orientation" value="landscape"' in response.data
     assert b'name="page_margin" value="0.4"' in response.data
     assert b'name="panel_gap" value="0.3"' in response.data
@@ -235,12 +265,18 @@ def test_preview_renders_selected_layout(monkeypatch):
     assert b"Ada" in response.data
     assert b"MakeSpace" in response.data
     assert b'class="draggable-panel-text"' in response.data
+    assert b'class="panel-text-hit-area"' in response.data
+    assert b'sizePanelTextTarget' in response.data
+    assert response.data.index(b'class="draggable-badge"') < response.data.index(b'class="draggable-panel-text"')
     assert b'name="front_text_x"' in response.data
     assert b'name="back_text_y"' in response.data
     assert b'updatePanelTextFromInputs' in response.data
     assert b'name="front_text" value="Ada"' in response.data
     assert b'name="back_text" value="MakeSpace"' in response.data
     assert b'name="text_font" value="dejavu"' in response.data
+    assert b'name="text_size" value="36"' in response.data
+    assert b'font-size="36.0"' in response.data
+    assert b'height="50.0"' in response.data
 
 
 def test_calibration_pdf_route_returns_printable_pdf():
@@ -285,7 +321,7 @@ def test_pdf_route_returns_mirrored_pdf_download_by_default(monkeypatch):
     assert response.headers["Content-Disposition"] == "attachment; filename=tshirt-badge-template.pdf"
     assert response.data.startswith(b"%PDF")
     assert calls[0]["mirror"] is True
-    assert calls[0]["panel_text"] == {"front": "", "back": "", "font": "ubuntu"}
+    assert calls[0]["panel_text"] == {"front": "", "back": "", "font": "ubuntu", "size": "28"}
     assert calls[0]["print_marks"] is False
     assert calls[0]["cut_lines"] is False
     assert calls[0]["metadata"]["include_print_marks"] == "false"
@@ -310,11 +346,12 @@ def test_pdf_route_passes_panel_text_options(monkeypatch):
             "front_text": "Ada",
             "back_text": "MakeSpace",
             "text_font": "courier",
+            "text_size": "34",
         },
     )
 
     assert response.status_code == 200
-    assert calls[0]["panel_text"] == {"front": "Ada", "back": "MakeSpace", "font": "courier"}
+    assert calls[0]["panel_text"] == {"front": "Ada", "back": "MakeSpace", "font": "courier", "size": "34"}
 
 
 
@@ -512,6 +549,7 @@ def test_api_health_options_and_badges(monkeypatch):
     assert options.status_code == 200
     assert options.json["defaults"]["page_size"] == "a4"
     assert options.json["defaults"]["text_font"] == "ubuntu"
+    assert options.json["defaults"]["text_size"] == "28"
     assert options.json["defaults"]["curve_device"] == "custom"
     assert options.json["defaults"]["curve_diameter"] == "8.0"
     assert options.json["defaults"]["page_margin"] == "1.25"
@@ -642,6 +680,7 @@ def test_api_layout_preview_computes_json_layout_with_logo(monkeypatch):
                 "front_text": "Ada",
                 "back_text": "MakeSpace",
                 "text_font": "times",
+                "text_size": "32",
                 "include_curve_effect": True,
                 "curve_device": "mug",
                 "curve_diameter": "3.25",
@@ -660,6 +699,7 @@ def test_api_layout_preview_computes_json_layout_with_logo(monkeypatch):
     assert response.json["options"]["front_text"] == "Ada"
     assert response.json["options"]["back_text"] == "MakeSpace"
     assert response.json["options"]["text_font"] == "times"
+    assert response.json["options"]["text_size"] == "32"
     assert response.json["options"]["include_curve_effect"] is True
     assert response.json["options"]["curve_device"] == "mug"
     assert response.json["options"]["curve_diameter"] == "3.25"
@@ -694,6 +734,7 @@ def test_api_pdf_generates_pdf_from_json(monkeypatch):
                 "badge_size": "1.0",
                 "front_text": "Ada",
                 "text_font": "courier",
+                "text_size": "31",
                 "mirror": False,
                 "include_print_marks": True,
                 "include_cut_lines": True,
@@ -716,7 +757,7 @@ def test_api_pdf_generates_pdf_from_json(monkeypatch):
     assert args[2][0].placements[0].x == 72.0
     assert args[2][0].placements[0].rotation == 12.0
     assert kwargs["mirror"] is False
-    assert kwargs["panel_text"] == {"front": "Ada", "back": "", "font": "courier"}
+    assert kwargs["panel_text"] == {"front": "Ada", "back": "", "font": "courier", "size": "31"}
     assert kwargs["print_marks"] is True
     assert kwargs["cut_lines"] is True
     assert kwargs["metadata"]["include_print_marks"] == "true"
@@ -747,12 +788,14 @@ def test_pdf_route_passes_dragged_panel_text_positions(monkeypatch):
             "front_text": "Ada",
             "front_text_x": "2.5",
             "front_text_y": "3.0",
+            "text_size": "30",
         },
     )
 
     assert response.status_code == 200
     panel_text = calls[0][1]["panel_text"]
     assert panel_text["front"] == "Ada"
+    assert panel_text["size"] == "30"
     assert panel_text["positions"]["front"] == {"x": 180.0, "y": 576.0}
 
 def test_api_pdf_verifies_assets_before_rendering(monkeypatch):
@@ -913,6 +956,7 @@ def test_mcp_metadata_resources_prompts_and_tools(monkeypatch):
     options_resource = read_options.json["result"]["contents"][0]
     assert options_resource["mimeType"] == "application/json"
     assert json.loads(options_resource["text"])["defaults"]["text_font"] == "ubuntu"
+    assert json.loads(options_resource["text"])["defaults"]["text_size"] == "28"
     assert json.loads(options_resource["text"])["defaults"]["page_margin"] == "1.25"
     assert read_badges.status_code == 200
     badges_resource = read_badges.json["result"]["contents"][0]
