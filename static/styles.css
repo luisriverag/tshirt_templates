@@ -127,7 +127,14 @@ button:hover { transform: translate(-2px, -2px); box-shadow: 6px 6px 0 var(--sec
 .page-preview.high-contrast .draggable-badge.dragging .badge-transform { filter: drop-shadow(0 0 4px #000) drop-shadow(0 0 8px #ffff00); }
 .panel-title { font: 700 13px "Courier New", monospace; fill: #333; }
 .page-preview.high-contrast .panel-title { fill: #000; font-weight: 900; }
-.panel-custom-text { fill: #111; font-weight: 800; text-anchor: middle; }
+.panel-custom-text { fill: #111; font-weight: 800; text-anchor: middle; pointer-events: none; }
+.draggable-panel-text { cursor: grab; outline: none; }
+.draggable-panel-text.dragging { cursor: grabbing; }
+.text-selection-outline { display: none; fill: rgba(255, 255, 0, .18); stroke: #111; stroke-width: 2; stroke-dasharray: 7 4; pointer-events: none; }
+.draggable-panel-text:focus .text-selection-outline,
+.draggable-panel-text.dragging .text-selection-outline { display: block; }
+.manual-text-tools { margin: 18px 0; padding: 14px; border: 1px solid var(--line-color); border-radius: var(--border-radius); background: rgba(0,0,0,.18); }
+.manual-text-tools h3 { margin: 0 0 8px; color: var(--primary-color); text-transform: uppercase; }
 .sticky-actions { margin-top: 18px; }
 .draggable-badge { cursor: grab; outline: none; }
 .draggable-badge:focus .badge-transform,

@@ -234,6 +234,10 @@ def test_preview_renders_selected_layout(monkeypatch):
     assert b"BACK" in response.data
     assert b"Ada" in response.data
     assert b"MakeSpace" in response.data
+    assert b'class="draggable-panel-text"' in response.data
+    assert b'name="front_text_x"' in response.data
+    assert b'name="back_text_y"' in response.data
+    assert b'updatePanelTextFromInputs' in response.data
     assert b'name="front_text" value="Ada"' in response.data
     assert b'name="back_text" value="MakeSpace"' in response.data
     assert b'name="text_font" value="dejavu"' in response.data
@@ -627,12 +631,14 @@ def test_api_layout_preview_computes_json_layout_with_logo(monkeypatch):
         json={
             "badge_ids": [DEMO_BADGE.id],
             "options": {
-                "sides": ["front"],
+                "sides": ["front", "back"],
                 "unit": "in",
                 "badge_size": "1.0",
                 "spacing": "0.2",
                 "include_logo": True,
                 "logo_size": "2.0",
+                "front_logo_size": "1.0",
+                "back_logo_size": "3.0",
                 "front_text": "Ada",
                 "back_text": "MakeSpace",
                 "text_font": "times",
@@ -649,6 +655,8 @@ def test_api_layout_preview_computes_json_layout_with_logo(monkeypatch):
     assert response.status_code == 200
     assert response.json["page"]["unit"] == "in"
     assert response.json["options"]["include_logo"] is True
+    assert response.json["options"]["front_logo_size"] == "1.0"
+    assert response.json["options"]["back_logo_size"] == "3.0"
     assert response.json["options"]["front_text"] == "Ada"
     assert response.json["options"]["back_text"] == "MakeSpace"
     assert response.json["options"]["text_font"] == "times"
@@ -656,11 +664,14 @@ def test_api_layout_preview_computes_json_layout_with_logo(monkeypatch):
     assert response.json["options"]["curve_device"] == "mug"
     assert response.json["options"]["curve_diameter"] == "3.25"
     assert [badge["id"] for badge in response.json["badges"]] == [DEMO_BADGE.id, "makespace-logo"]
-    placements = response.json["layouts"][0]["placements"]
-    assert [placement["badge_id"] for placement in placements] == [DEMO_BADGE.id, "makespace-logo"]
-    assert placements[0]["x"] == 1.0
-    assert placements[0]["rotation"] == 12.0
-    assert placements[-1]["width"] == 2.0
+    front_placements = response.json["layouts"][0]["placements"]
+    back_placements = response.json["layouts"][1]["placements"]
+    assert [placement["badge_id"] for placement in front_placements] == [DEMO_BADGE.id, "makespace-logo"]
+    assert [placement["badge_id"] for placement in back_placements] == [DEMO_BADGE.id, "makespace-logo"]
+    assert front_placements[0]["x"] == 1.0
+    assert front_placements[0]["rotation"] == 12.0
+    assert front_placements[-1]["width"] == 1.0
+    assert back_placements[-1]["width"] == 3.0
 
 
 def test_api_pdf_generates_pdf_from_json(monkeypatch):
@@ -716,6 +727,33 @@ def test_api_pdf_generates_pdf_from_json(monkeypatch):
     assert kwargs["curve_settings"] == {"device": "mug", "diameter_inches": 3.25}
 
 
+def test_pdf_route_passes_dragged_panel_text_positions(monkeypatch):
+    calls = []
+    monkeypatch.setattr("tshirt_templates.badges.list_badges", lambda: [DEMO_BADGE])
+    monkeypatch.setitem(
+        sys.modules,
+        "tshirt_templates.pdf",
+        SimpleNamespace(render_pdf=lambda *args, **kwargs: calls.append((args, kwargs)) or b"%PDF-1.4\n%%EOF"),
+    )
+    app = create_app()
+
+    response = app.test_client().post(
+        "/pdf",
+        data={
+            "badges": [DEMO_BADGE.id],
+            "sides": ["front"],
+            "unit": "in",
+            "page_size": "letter",
+            "front_text": "Ada",
+            "front_text_x": "2.5",
+            "front_text_y": "3.0",
+        },
+    )
+
+    assert response.status_code == 200
+    panel_text = calls[0][1]["panel_text"]
+    assert panel_text["front"] == "Ada"
+    assert panel_text["positions"]["front"] == {"x": 180.0, "y": 576.0}
 
 def test_api_pdf_verifies_assets_before_rendering(monkeypatch):
     render_calls = []

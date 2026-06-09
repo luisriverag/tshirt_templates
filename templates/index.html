@@ -227,14 +227,23 @@
                 </label>
               </div>
               <div class="control-grid" style="margin-top:12px">
-                <label>Logo size
-                  <select name="logo_size" id="logo-size-select">
+                <label>Front logo size
+                  <select name="front_logo_size" id="front-logo-size-select">
                     {% for amount in logo_size_options[default_unit] %}
                       <option value="{{ amount }}" {% if amount == "5.0" %}selected{% endif %}>{{ amount }} {{ default_unit }}</option>
                     {% endfor %}
                   </select>
                   <small>Used only when the MakeSpace logo option is enabled.</small>
                 </label>
+                <label>Back logo size
+                  <select name="back_logo_size" id="back-logo-size-select">
+                    {% for amount in logo_size_options[default_unit] %}
+                      <option value="{{ amount }}" {% if amount == "5.0" %}selected{% endif %}>{{ amount }} {{ default_unit }}</option>
+                    {% endfor %}
+                  </select>
+                  <small>Logo size can differ from the front panel.</small>
+                </label>
+                <input type="hidden" name="logo_size" id="logo-size-select" value="{{ default_logo_amounts[default_unit] }}">
               </div>
             </fieldset>
 
@@ -302,6 +311,8 @@
       const badgeSizeSelect = document.querySelector('#badge-size-select');
       const spacingSelect = document.querySelector('#spacing-select');
       const logoSizeSelect = document.querySelector('#logo-size-select');
+      const frontLogoSizeSelect = document.querySelector('#front-logo-size-select');
+      const backLogoSizeSelect = document.querySelector('#back-logo-size-select');
       const pageMarginInput = document.querySelector('#page-margin-input');
       const panelGapInput = document.querySelector('#panel-gap-input');
       const dynamicUnitLabels = document.querySelectorAll('.dynamic-unit');
@@ -377,7 +388,9 @@
         const unit = unitSelect.value;
         fillAmountSelect(badgeSizeSelect, badgeSizeOptions[unit], defaultValues.badgeSize[unit]);
         fillAmountSelect(spacingSelect, spacingOptions[unit], defaultValues.spacing[unit]);
-        fillAmountSelect(logoSizeSelect, logoSizeOptions[unit], defaultValues.logoSize[unit]);
+        logoSizeSelect.value = defaultValues.logoSize[unit];
+        fillAmountSelect(frontLogoSizeSelect, logoSizeOptions[unit], defaultValues.logoSize[unit]);
+        fillAmountSelect(backLogoSizeSelect, logoSizeOptions[unit], defaultValues.logoSize[unit]);
         pageMarginInput.dataset.defaultValue = defaultValues.pageMargin[unit];
         panelGapInput.dataset.defaultValue = defaultValues.panelGap[unit];
         pageMarginInput.value = pageMarginInput.dataset.defaultValue;
