@@ -208,7 +208,11 @@ def _draw_panel_text(
     if not text:
         return
     font_name = _font_name(panel_text.get("font", "ubuntu"))
-    font_size = min(30.0, max(14.0, layout.width / max(len(text), 1) * 1.35))
+    try:
+        font_size = float(panel_text.get("size", 28.0))
+    except (TypeError, ValueError):
+        font_size = 28.0
+    font_size = min(72.0, max(8.0, font_size))
     pdf.saveState()
     pdf.setFillColor(colors.HexColor("#111111"))
     pdf.setFont(font_name, font_size)

@@ -3,6 +3,7 @@
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
+    <link rel="icon" type="image/png" href="https://makespacemadrid.org/assets/images/favicon.png">
     <title>T-shirt sublimation badge templates</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
   </head>
@@ -27,19 +28,6 @@
         </div>
       </section>
 
-      <section class="panel quick-guide" aria-labelledby="quick-guide-title">
-        <div class="section-heading">
-          <h2 id="quick-guide-title">Quick print guide</h2>
-          <span>Check before pressing</span>
-        </div>
-        <div class="guide-cards">
-          <article><strong>Mirror transfers</strong><p>Keep mirroring on for sublimation transfer paper unless your printer driver already mirrors the sheet.</p></article>
-          <article><strong>Leave cut spacing</strong><p>Use enough spacing and optional cut-line outlines so each badge can be trimmed cleanly.</p></article>
-          <article><strong>Measure curves</strong><p>For mugs or canteens, measure the outside diameter and test the wrap on scrap paper first.</p></article>
-        </div>
-      </section>
-
-
 
       {% if upload_messages %}
         <section class="panel alert-list" role="status" aria-live="polite">
@@ -58,7 +46,7 @@
             <h2>Badges</h2>
             <span>{{ badges|length }} image assets</span>
           </div>
-          <p class="hint" id="badge-picker-help">All badges are selected by default for both sides. Badges appear before template options so you can pick artwork first. Choose whether each badge prints on the front, back, or both; drag cards to set the initial order.</p>
+          <p class="hint" id="badge-picker-help">Badges are selected by default for both sides, except badge-template.png, which is only selected when you check it manually. Badges appear before template options so you can pick artwork first. Choose whether each badge prints on the front, back, or both; drag cards to set the initial order.</p>
           <div class="selection-summary" aria-live="polite">
             <strong><span id="front-badge-count">{{ selected_ids|length }}</span> front</strong>
             <strong><span id="back-badge-count">{{ selected_ids|length }}</span> back</strong>
@@ -100,14 +88,15 @@
           <div class="badge-grid" id="badge-grid" aria-describedby="badge-picker-help">
             {% for badge in badges %}
               {% set badge_category = badge.path.rsplit('/', 1)[0] if '/' in badge.path else 'Uncategorized' %}
-              <article class="badge-card" draggable="true" data-name="{{ badge.name|lower }}" data-path="{{ badge.path|lower }}" data-category="{{ badge_category|lower }}">
+              {% set manual_only = badge.id in manual_selection_ids %}
+              <article class="badge-card" draggable="true" data-name="{{ badge.name|lower }}" data-path="{{ badge.path|lower }}" data-category="{{ badge_category|lower }}" data-manual-only="{{ 'true' if manual_only else 'false' }}">
                 <span class="drag-handle" aria-hidden="true">↕ Drag</span>
                 <span class="side-picker" aria-label="Choose print sides for {{ badge.name }}">
                   <span>Print on</span>
                   <label class="side-option"><input type="checkbox" name="front_badges" value="{{ badge.id }}" {% if badge.id in selected_ids %}checked{% endif %}> Front</label>
                   <label class="side-option"><input type="checkbox" name="back_badges" value="{{ badge.id }}" {% if badge.id in selected_ids %}checked{% endif %}> Back</label>
                 </span>
-                <span class="assignment-chip" aria-live="polite">Both pages</span>
+                <span class="assignment-chip" aria-live="polite">{{ 'Not printed' if manual_only else 'Both pages' }}</span>
                 <span class="thumb"><img src="{{ badge.raw_url }}" alt="{{ badge.name }}" loading="lazy"></span>
                 <strong>{{ badge.name }}</strong>
                 <small>{{ badge.path }}</small>
@@ -224,6 +213,11 @@
                       <option value="{{ value }}" {% if value == "ubuntu" %}selected{% endif %}>{{ label }}</option>
                     {% endfor %}
                   </select>
+                  <small>Font for front/back panel labels.</small>
+                </label>
+                <label>Text size
+                  <input type="number" name="text_size" id="text-size-input" min="8" max="72" step="1" value="{{ default_text_size }}">
+                  <small>Panel label size in PDF points.</small>
                 </label>
               </div>
               <div class="control-grid" style="margin-top:12px">
@@ -318,6 +312,7 @@
       const dynamicUnitLabels = document.querySelectorAll('.dynamic-unit');
       const curveDeviceSelect = document.querySelector('#curve-device-select');
       const curveDiameterInput = document.querySelector('#curve-diameter-input');
+      const textSizeInput = document.querySelector('#text-size-input');
       const curveDiameterUnit = document.querySelector('#curve-diameter-unit');
       const curveCircumference = document.querySelector('#curve-circumference');
       const includeCurveEffect = document.querySelector('#include-curve-effect');
@@ -403,7 +398,7 @@
         const selectedCurveDevice = curveDeviceSelect.value || 'custom';
         curveDiameterInput.dataset.defaultValue = defaultValues.curveDeviceDiameters[selectedCurveDevice][unit] || defaultValues.curveDiameter[unit];
         curveDiameterInput.value = curveDiameterInput.dataset.defaultValue;
-        [pageMarginInput, panelGapInput, curveDiameterInput].forEach(normalizeNumberInput);
+        [pageMarginInput, panelGapInput, curveDiameterInput, textSizeInput].forEach(normalizeNumberInput);
         updateCurveHelper();
       }
 
@@ -446,7 +441,7 @@
       }
 
       curveDeviceSelect.addEventListener('change', updateAmountSelectors);
-      [pageMarginInput, panelGapInput, curveDiameterInput].forEach((input) => {
+      [pageMarginInput, panelGapInput, curveDiameterInput, textSizeInput].forEach((input) => {
         input.addEventListener('change', () => {
           normalizeNumberInput(input);
           updateCurveHelper();
@@ -455,7 +450,7 @@
       curveDiameterInput.addEventListener('input', updateCurveHelper);
       unitSelect.addEventListener('change', updateAmountSelectors);
       document.querySelector('.generator').addEventListener('submit', () => {
-        [pageMarginInput, panelGapInput, curveDiameterInput].forEach(normalizeNumberInput);
+        [pageMarginInput, panelGapInput, curveDiameterInput, textSizeInput].forEach(normalizeNumberInput);
       });
       updateAmountSelectors();
 
@@ -491,6 +486,7 @@
       badgeCategoryFilter.addEventListener('change', filterBadges);
       badgeSideFilter.addEventListener('change', filterBadges);
       function setCardAssignment(card, assignment) {
+        if (card.dataset.manualOnly === 'true' && assignment !== 'none') return;
         card.querySelector('input[name="front_badges"]').checked = ['front', 'both'].includes(assignment);
         card.querySelector('input[name="back_badges"]').checked = ['back', 'both'].includes(assignment);
       }

@@ -130,6 +130,31 @@ def test_render_pdf_does_not_draw_panel_headers_page_numbers_or_panel_perimeter(
     assert drawn_rectangles == []
 
 
+
+def test_render_pdf_uses_configured_panel_text_size(monkeypatch):
+    font_sizes = []
+    original_canvas = pdf_module.canvas.Canvas
+
+    class TrackingCanvas(original_canvas):
+        def setFont(self, font_name, font_size, leading=None):
+            font_sizes.append(font_size)
+            if leading is None:
+                return super().setFont(font_name, font_size)
+            return super().setFont(font_name, font_size, leading)
+
+    monkeypatch.setattr(pdf_module.canvas, "Canvas", TrackingCanvas)
+
+    content = render_pdf(
+        [],
+        (200.0, 300.0),
+        [PanelLayout("front", 20.0, 20.0, 160.0, 120.0, [])],
+        mirror=False,
+        panel_text={"front": "Ada", "font": "ubuntu", "size": "36"},
+    )
+
+    assert content.startswith(b"%PDF")
+    assert 36.0 in font_sizes
+
 def test_render_pdf_fetches_each_badge_asset_once_for_repeated_placements(monkeypatch):
     badge = Badge(
         id="demo-badge.svg",

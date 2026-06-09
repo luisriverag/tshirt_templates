@@ -3,6 +3,7 @@
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
+    <link rel="icon" type="image/png" href="https://makespacemadrid.org/assets/images/favicon.png">
     <title>Preview t-shirt template</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
   </head>
@@ -59,14 +60,6 @@
               <rect class="panel-outline" x="{{ layout.x }}" y="{{ page_height - layout.y - layout.height }}" width="{{ layout.width }}" height="{{ layout.height }}" rx="12"/>
               <text x="{{ layout.x + 10 }}" y="{{ page_height - layout.y - layout.height + 22 }}" class="panel-title">{{ layout.side|upper }}</text>
               {% set panel_text = form.get(layout.side ~ '_text', '') %}
-              {% if panel_text %}
-                {% set text_x = (form.get(layout.side ~ '_text_x')|float if form.get(layout.side ~ '_text_x') else (layout.x + layout.width / 2) / points_per_unit) * points_per_unit %}
-                {% set text_y = (form.get(layout.side ~ '_text_y')|float if form.get(layout.side ~ '_text_y') else (page_height - layout.y - 18) / points_per_unit) * points_per_unit %}
-                <g class="draggable-panel-text" tabindex="0" role="button" aria-label="Move {{ layout.side }} text" data-side="{{ layout.side }}" data-x="{{ text_x }}" data-y="{{ text_y }}">
-                  <text x="{{ text_x }}" y="{{ text_y }}" class="panel-custom-text" font-family="{{ form.get('text_font', 'ubuntu')|replace('-', ' ') }}, Ubuntu, Helvetica, Arial, sans-serif" font-size="28">{{ panel_text }}</text>
-                  <rect class="text-selection-outline" x="{{ text_x - 120 }}" y="{{ text_y - 32 }}" width="240" height="42" rx="8"/>
-                </g>
-              {% endif %}
               {% for placement in layout.placements %}
                 {% set placement_index = loop.index0 %}
                 {% set badge = badge_lookup.get(placement.badge_id) %}
@@ -83,6 +76,16 @@
                   </g>
                 {% endif %}
               {% endfor %}
+              {% if panel_text %}
+                {% set text_x = (form.get(layout.side ~ '_text_x')|float if form.get(layout.side ~ '_text_x') else (layout.x + layout.width / 2) / points_per_unit) * points_per_unit %}
+                {% set text_y = (form.get(layout.side ~ '_text_y')|float if form.get(layout.side ~ '_text_y') else (page_height - layout.y - 18) / points_per_unit) * points_per_unit %}
+                {% set panel_text_size = text_size|float %}
+                <g class="draggable-panel-text" tabindex="0" role="button" aria-label="Move {{ layout.side }} text" data-side="{{ layout.side }}" data-x="{{ text_x }}" data-y="{{ text_y }}">
+                  <rect class="panel-text-hit-area" x="{{ text_x - 120 }}" y="{{ text_y - panel_text_size - 4 }}" width="240" height="{{ panel_text_size + 14 }}" rx="8"/>
+                  <text x="{{ text_x }}" y="{{ text_y }}" class="panel-custom-text" font-family="{{ form.get('text_font', 'ubuntu')|replace('-', ' ') }}, Ubuntu, Helvetica, Arial, sans-serif" font-size="{{ panel_text_size }}">{{ panel_text }}</text>
+                  <rect class="text-selection-outline" x="{{ text_x - 120 }}" y="{{ text_y - panel_text_size - 4 }}" width="240" height="{{ panel_text_size + 14 }}" rx="8"/>
+                </g>
+              {% endif %}
             </svg>
           </div>
         {% endfor %}
@@ -191,7 +194,7 @@
           </div>
         </section>
 
-        {% for key in ['page_size', 'orientation', 'mode', 'order', 'unit', 'badge_size', 'spacing', 'page_margin', 'panel_gap', 'include_logo', 'logo_size', 'front_logo_size', 'back_logo_size', 'copies', 'mirror', 'include_print_marks', 'include_cut_lines', 'include_curve_effect', 'curve_device', 'curve_diameter', 'front_text', 'back_text', 'text_font'] %}
+        {% for key in ['page_size', 'orientation', 'mode', 'order', 'unit', 'badge_size', 'spacing', 'page_margin', 'panel_gap', 'include_logo', 'logo_size', 'front_logo_size', 'back_logo_size', 'copies', 'mirror', 'include_print_marks', 'include_cut_lines', 'include_curve_effect', 'curve_device', 'curve_diameter', 'front_text', 'back_text', 'text_font', 'text_size'] %}
           {% if form.get(key) %}<input type="hidden" name="{{ key }}" value="{{ form.get(key) }}">{% endif %}
         {% endfor %}
         {% for side in form.getlist('sides') %}<input type="hidden" name="sides" value="{{ side }}">{% endfor %}
@@ -297,15 +300,39 @@
         status.textContent = message;
       }
 
+      function sizePanelTextTarget(textGroup) {
+        const text = textGroup.querySelector('text');
+        const outline = textGroup.querySelector('.text-selection-outline');
+        const hitArea = textGroup.querySelector('.panel-text-hit-area');
+        if (!text || !outline || !hitArea) return;
+        let box = { width: Number(outline.getAttribute('width')) || 240 };
+        try {
+          box = text.getBBox();
+        } catch (error) {
+          // Keep the server-rendered fallback size when SVG text metrics are unavailable.
+        }
+        const fontSize = Number(text.getAttribute('font-size')) || 28;
+        const width = Math.max(80, box.width + 32);
+        const height = fontSize + 14;
+        [outline, hitArea].forEach((rect) => {
+          rect.setAttribute('width', width);
+          rect.setAttribute('height', height);
+        });
+      }
+
       function setPanelTextPosition(textGroup, x, y) {
         textGroup.dataset.x = x;
         textGroup.dataset.y = y;
         const text = textGroup.querySelector('text');
         const outline = textGroup.querySelector('.text-selection-outline');
+        const hitArea = textGroup.querySelector('.panel-text-hit-area');
         text.setAttribute('x', x);
         text.setAttribute('y', y);
-        outline.setAttribute('x', x - Number(outline.getAttribute('width')) / 2);
-        outline.setAttribute('y', y - 32);
+        const fontSize = Number(text.getAttribute('font-size')) || 28;
+        [outline, hitArea].forEach((rect) => {
+          rect.setAttribute('x', x - Number(rect.getAttribute('width')) / 2);
+          rect.setAttribute('y', y - fontSize - 4);
+        });
       }
 
       function updatePanelTextInputs(textGroup) {
@@ -497,6 +524,8 @@
       let drag = null;
       let textDrag = null;
       document.querySelectorAll('.draggable-panel-text').forEach((textGroup) => {
+        sizePanelTextTarget(textGroup);
+        setPanelTextPosition(textGroup, Number(textGroup.dataset.x), Number(textGroup.dataset.y));
         textGroup.addEventListener('pointerdown', (event) => {
           event.preventDefault();
           const currentSvg = textGroup.ownerSVGElement;

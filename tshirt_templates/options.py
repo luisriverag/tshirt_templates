@@ -27,6 +27,7 @@ DEFAULT_PANEL_GAP_AMOUNTS = {"cm": "0.85", "in": "0.33"}
 DEFAULT_LOGO_AMOUNTS = {"cm": "5.0", "in": "2.0"}
 DEFAULT_CURVE_DEVICE = "custom"
 DEFAULT_CURVE_DIAMETER_AMOUNTS = {"cm": "8.0", "in": "3.15"}
+DEFAULT_TEXT_SIZE = "28"
 CURVE_DEVICE_DIAMETERS = {
     "custom": DEFAULT_CURVE_DIAMETER_AMOUNTS,
     "mug": {"cm": "8.2", "in": "3.23"},
@@ -111,6 +112,7 @@ class LayoutOptions:
     front_text: str = ""
     back_text: str = ""
     text_font: str = "ubuntu"
+    text_size: str = DEFAULT_TEXT_SIZE
     include_curve_effect: bool = False
     curve_device: str = DEFAULT_CURVE_DEVICE
     curve_diameter: str = DEFAULT_CURVE_DIAMETER_AMOUNTS[DEFAULT_UNIT]
@@ -213,6 +215,7 @@ def parse_layout_options(
         0.0,
         10.0 if unit == "cm" else 4.0,
     )
+    text_size = _safe_positive_amount(values.get("text_size"), DEFAULT_TEXT_SIZE, 8.0, 72.0)
     curve_device = _valid_choice(values.get("curve_device"), VALID_CURVE_DEVICES, DEFAULT_CURVE_DEVICE)
     curve_diameter_default = CURVE_DEVICE_DIAMETERS[curve_device][unit]
     curve_diameter = _safe_positive_amount(
@@ -251,6 +254,7 @@ def parse_layout_options(
         front_text=_safe_panel_text(values.get("front_text")),
         back_text=_safe_panel_text(values.get("back_text")),
         text_font=_valid_choice(values.get("text_font"), VALID_TEXT_FONTS, "ubuntu"),
+        text_size=text_size,
         include_curve_effect=_truthy(values.get("include_curve_effect")),
         curve_device=curve_device,
         curve_diameter=curve_diameter,
