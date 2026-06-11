@@ -73,5 +73,6 @@ The pytest suite includes dependency-light unit coverage for layout, badge disco
 ## Notes
 
 - The app caches the GitHub badge listing in memory for 10-minute windows to avoid repeated API calls; use the refresh button to clear that cache and fetch the latest repository `HEAD` immediately.
+- Badge refreshes, upload saves/rejections, and PDF asset/preflight failures are logged as JSON event records through Flask's application logger so local operators can filter them by `event`, `route`, `reason`, and count fields.
 - If GitHub cannot be reached, a built-in demo badge is shown so the UI and PDF flow remain usable.
 - SVG rendering in PDFs is handled with `svglib` and `reportlab`.

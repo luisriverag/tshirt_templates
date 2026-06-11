@@ -6,6 +6,7 @@ import base64
 import binascii
 import importlib
 import json
+import logging
 from datetime import UTC, datetime
 from pathlib import Path
 from urllib.parse import parse_qs, urlsplit
@@ -96,8 +97,8 @@ LAYOUT_MODE_DETAILS = {
         "label": LAYOUT_MODES["m-pixels-no-shrink"],
         "description": (
             "Badges fill a fixed-size pixel-art capital M without reducing badge size; overflow "
-            "falls back to one line above, lines above and below, a square frame, then a "
-            "double-square frame."
+            "falls back to one buffered line above, buffered lines above and below, a "
+            "buffered square frame, then a double-square frame."
         ),
         "fallbacks": [
             "line-above",
@@ -126,6 +127,15 @@ UNITS = {
     "cm": "Centimeters",
     "in": "Inches",
 }
+
+
+def _log_event(app: Flask, level: int, event: str, **fields: object) -> None:
+    """Emit a machine-parseable application event through Flask's logger."""
+
+    payload = {"event": event, **fields}
+    app.logger.log(level, json.dumps(payload, sort_keys=True, default=str))
+
+
 TEXT_FONTS = {
     "ubuntu": "Ubuntu",
     "fredoka-one": "Fredoka One",
@@ -545,6 +555,7 @@ def create_app() -> Flask:
     @app.post("/refresh")
     def refresh() -> Response:
         refresh_badges()
+        _log_event(app, logging.INFO, "badge_refresh", source="browser")
         return redirect(url_for("index"))
 
     @app.get("/uploads/<path:filename>")
@@ -553,7 +564,15 @@ def create_app() -> Flask:
 
     @app.post("/uploads/delete")
     def delete_upload() -> Response:
-        delete_uploaded_badge(request.form.get("delete_upload", ""), _upload_folder())
+        filename = request.form.get("delete_upload", "")
+        deleted = delete_uploaded_badge(filename, _upload_folder())
+        _log_event(
+            app,
+            logging.INFO if deleted else logging.WARNING,
+            "upload_deleted" if deleted else "upload_delete_missing",
+            route="/uploads/delete",
+            filename=filename,
+        )
         return redirect(url_for("index"))
 
     @app.post("/uploads/replace")
@@ -561,13 +580,36 @@ def create_app() -> Flask:
         filename = request.form.get("replace_upload", "")
         upload = _first_uploaded_file("replacement_upload")
         if not upload:
+            _log_event(
+                app,
+                logging.WARNING,
+                "upload_rejected",
+                route="/uploads/replace",
+                reason="missing_file",
+            )
             flash("Choose a replacement image before using Replace upload.")
         else:
             badge, warnings = replace_uploaded_badge_bytes_with_warnings(
                 filename, upload.read(), _upload_folder()
             )
             if not badge:
+                _log_event(
+                    app,
+                    logging.WARNING,
+                    "upload_rejected",
+                    route="/uploads/replace",
+                    reason="invalid_replacement",
+                )
                 flash("Replacement upload must be a valid SVG, PNG, JPG, or JPEG image within the size limit.")
+            else:
+                _log_event(
+                    app,
+                    logging.INFO,
+                    "upload_replaced",
+                    route="/uploads/replace",
+                    filename=filename,
+                    warning_count=len(warnings),
+                )
             for warning in warnings:
                 flash(warning.message)
         return redirect(url_for("index"))
@@ -605,6 +647,7 @@ def create_app() -> Flask:
     def api_badges() -> Response:
         if request.args.get("refresh") in {"1", "true", "yes"}:
             refresh_badges()
+            _log_event(app, logging.INFO, "badge_refresh", source="api")
         order = request.args.get("order", "alphabetical")
         badges = order_badges(_available_badges(), order)
         include_logo = request.args.get("include_logo") in {"1", "true", "yes"} or logo_requested_from_sides(
@@ -618,12 +661,27 @@ def create_app() -> Flask:
     def api_uploads() -> Response:
         upload_result = save_uploaded_badges_with_warnings(request.files.getlist("uploads"), _upload_folder())
         if not upload_result.badges:
+            _log_event(
+                app,
+                logging.WARNING,
+                "upload_rejected",
+                route="/api/v1/uploads",
+                warning_count=len(upload_result.warnings),
+            )
             return _api_error(
                 "invalid_upload",
                 "Upload at least one SVG, PNG, JPG, or JPEG image under the uploads field.",
                 400,
                 field="uploads",
             )
+        _log_event(
+            app,
+            logging.INFO,
+            "upload_saved",
+            route="/api/v1/uploads",
+            badge_count=len(upload_result.badges),
+            warning_count=len(upload_result.warnings),
+        )
         return (
             jsonify(
                 {
@@ -637,18 +695,39 @@ def create_app() -> Flask:
     @app.delete("/api/v1/uploads/<path:filename>")
     def api_delete_upload(filename: str) -> Response:
         if not delete_uploaded_badge(filename, _upload_folder()):
+            _log_event(
+                app,
+                logging.WARNING,
+                "upload_delete_missing",
+                route="/api/v1/uploads/{filename}",
+                filename=filename,
+            )
             return _api_error(
                 "upload_not_found",
                 "No uploaded badge exists for that filename.",
                 404,
                 field="filename",
             )
+        _log_event(
+            app,
+            logging.INFO,
+            "upload_deleted",
+            route="/api/v1/uploads/{filename}",
+            filename=filename,
+        )
         return jsonify({"deleted": filename})
 
     @app.put("/api/v1/uploads/<path:filename>")
     def api_replace_upload(filename: str) -> Response:
         upload = _first_uploaded_file("upload") or _first_uploaded_file("replacement_upload")
         if not upload:
+            _log_event(
+                app,
+                logging.WARNING,
+                "upload_rejected",
+                route="/api/v1/uploads/{filename}",
+                reason="missing_file",
+            )
             return _api_error(
                 "invalid_upload",
                 "Upload one replacement SVG, PNG, JPG, or JPEG image under the upload field.",
@@ -659,12 +738,27 @@ def create_app() -> Flask:
             filename, upload.read(), _upload_folder()
         )
         if not badge:
+            _log_event(
+                app,
+                logging.WARNING,
+                "upload_rejected",
+                route="/api/v1/uploads/{filename}",
+                reason="invalid_replacement",
+            )
             return _api_error(
                 "upload_not_found",
                 "No uploaded badge exists for that filename, or the replacement is invalid, empty, or too large.",
                 404,
                 field="filename",
             )
+        _log_event(
+            app,
+            logging.INFO,
+            "upload_replaced",
+            route="/api/v1/uploads/{filename}",
+            filename=filename,
+            warning_count=len(warnings),
+        )
         return jsonify({"badge": badge_to_dict(badge), "warnings": upload_warnings_to_dicts(warnings)})
 
     @app.post("/api/v1/layouts/preview")
@@ -688,6 +782,14 @@ def create_app() -> Flask:
         asset_failures = _pdf_asset_failures(render_badges)
         allow_partial = bool(payload.get("allow_partial"))
         if asset_failures and not allow_partial:
+            _log_event(
+                app,
+                logging.WARNING,
+                "pdf_generation_failed",
+                route="/api/v1/pdfs",
+                reason="asset_verification_failed",
+                failure_count=len(asset_failures),
+            )
             return _api_error(
                 "asset_verification_failed",
                 "One or more badge assets could not be fetched or rendered.",
@@ -698,6 +800,14 @@ def create_app() -> Flask:
 
         metadata = _pdf_metadata(options)
         if asset_failures:
+            _log_event(
+                app,
+                logging.WARNING,
+                "pdf_generation_partial",
+                route="/api/v1/pdfs",
+                reason="asset_verification_failed",
+                failure_count=len(asset_failures),
+            )
             metadata["asset_failures"] = str(len(asset_failures))
             metadata["allow_partial"] = "true"
 
@@ -831,6 +941,14 @@ def create_app() -> Flask:
         options = _layout_options()
         metadata = _pdf_metadata(options)
         if asset_failures:
+            _log_event(
+                app,
+                logging.WARNING,
+                "pdf_generation_partial",
+                route="/pdf",
+                reason="asset_verification_failed",
+                failure_count=len(asset_failures),
+            )
             metadata["asset_failures"] = str(len(asset_failures))
             metadata["allow_partial"] = "true"
         content = render_pdf(
@@ -864,6 +982,15 @@ def create_app() -> Flask:
         upload_result = save_uploaded_badges_with_warnings(
             request.files.getlist("uploads"), _upload_folder()
         )
+        if upload_result.badges or upload_result.warnings:
+            _log_event(
+                app,
+                logging.INFO if upload_result.badges else logging.WARNING,
+                "upload_saved" if upload_result.badges else "upload_rejected",
+                route=request.path,
+                badge_count=len(upload_result.badges),
+                warning_count=len(upload_result.warnings),
+            )
         uploaded_ids = [badge.id for badge in upload_result.badges]
         side_badge_ids = _side_badge_ids(uploaded_ids)
         all_badge_ids = _unique_badge_ids(
@@ -1538,6 +1665,14 @@ def create_app() -> Flask:
             )
         allow_partial = bool(arguments.get("allow_partial"))
         if warnings and not allow_partial:
+            _log_event(
+                app,
+                logging.WARNING,
+                "pdf_generation_failed",
+                route="/mcp",
+                reason="render_preflight_failed",
+                failure_count=len(warnings),
+            )
             return {
                 "error": {
                     "code": "render_preflight_failed",
@@ -1555,6 +1690,14 @@ def create_app() -> Flask:
                 }
             )
         if asset_failures and not allow_partial:
+            _log_event(
+                app,
+                logging.WARNING,
+                "pdf_generation_failed",
+                route="/mcp",
+                reason="asset_verification_failed",
+                failure_count=len(asset_failures),
+            )
             return {
                 "error": {
                     "code": "asset_verification_failed",
@@ -1566,6 +1709,14 @@ def create_app() -> Flask:
 
         metadata = _pdf_metadata(options)
         if asset_failures:
+            _log_event(
+                app,
+                logging.WARNING,
+                "pdf_generation_partial",
+                route="/mcp",
+                reason="asset_verification_failed",
+                failure_count=len(asset_failures),
+            )
             metadata["asset_failures"] = str(len(asset_failures))
             metadata["allow_partial"] = "true"
 

@@ -186,7 +186,7 @@ Response should include:
 - Page sizes.
 - Orientations.
 - Layout modes.
-- `layout_mode_details`, including labels/descriptions for each mode. The `m-pixels-no-shrink` entry documents that it preserves badge size and uses fallbacks in this order: one line above the M, lines above and below, square frame, then double-square frame.
+- `layout_mode_details`, including labels/descriptions for each mode. The `m-pixels-no-shrink` entry documents that it preserves badge size and uses fallbacks in this order: one buffered line above the M, buffered lines above and below, buffered square frame, then double-square frame.
 - Units.
 - Text fonts.
 - Curve device presets and preset diameters.
@@ -207,7 +207,7 @@ Example layout-mode metadata excerpt:
   "layout_mode_details": {
     "m-pixels-no-shrink": {
       "label": "M pixel shape (no shrink)",
-      "description": "Badges fill a fixed-size pixel-art capital M without reducing badge size; overflow falls back to one line above, lines above and below, a square frame, then a double-square frame.",
+      "description": "Badges fill a fixed-size pixel-art capital M without reducing badge size; overflow falls back to one buffered line above, buffered lines above and below, a buffered square frame, then a double-square frame.",
       "fallbacks": [
         "line-above",
         "lines-above-and-below",

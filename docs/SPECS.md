@@ -83,7 +83,7 @@ Discovered upstream badges are normalized into `Badge` records containing:
 
 ### Cache Behavior
 
-Badge discovery is cached in process for ten-minute buckets. The refresh route clears the cache explicitly so the next request fetches the current upstream tree.
+Badge discovery is cached in process for ten-minute buckets. The refresh route clears the cache explicitly so the next request fetches the current upstream tree. Browser and API refresh actions also emit structured JSON log events named `badge_refresh` with a `source` field.
 
 ### Fallback Badge
 
@@ -91,7 +91,7 @@ If upstream discovery fails or returns no supported images, a built-in demo SVG 
 
 ### User Uploads
 
-Uploaded badge artwork is saved under Flask's configured upload folder, which defaults to `instance/uploads`. Uploads are accepted for SVG, PNG, JPG, and JPEG images. Uploaded badges use `upload:` IDs and local file paths for PDF rendering. Saved uploads can be replaced or deleted from the browser picker or with the JSON API; both operations only accept a plain storage filename, reject path traversal, and apply the same supported-extension guard as uploads. Upload content is validated as SVG/XML or a Pillow-readable raster image before saving. Non-fatal dimension warnings are surfaced in browser notices and JSON/MCP `warnings` arrays when dimensions are missing, very small, or very large.
+Uploaded badge artwork is saved under Flask's configured upload folder, which defaults to `instance/uploads`. Uploads are accepted for SVG, PNG, JPG, and JPEG images. Uploaded badges use `upload:` IDs and local file paths for PDF rendering. Saved uploads can be replaced or deleted from the browser picker or with the JSON API; both operations only accept a plain storage filename, reject path traversal, and apply the same supported-extension guard as uploads. Upload content is validated as SVG/XML or a Pillow-readable raster image before saving. Non-fatal dimension warnings are surfaced in browser notices and JSON/MCP `warnings` arrays when dimensions are missing, very small, or very large. Upload saves, replacements, and rejections emit structured JSON log events such as `upload_saved`, `upload_replaced`, and `upload_rejected` with route and count fields for operations monitoring.
 
 ## Layout Model
 
@@ -130,7 +130,7 @@ Users may select front, back, or both panels. If both panels are selected, the c
 | `wave` | Badges follow a sine-wave ribbon. |
 | `border` | Badges wrap around panel edges. |
 | `m-pixels` | Badges fill a pixel-art capital M shape, repeating badges if needed; larger selections use denser M grids and scale the mosaic down only as needed to stay inside the selected panel. |
-| `m-pixels-no-shrink` | Badges fill a fixed-size pixel-art capital M without reducing badge size; overflow falls back to one line above the M, lines above and below, a square frame, then a double-square frame. |
+| `m-pixels-no-shrink` | Badges fill a fixed-size pixel-art capital M without reducing badge size; overflow falls back to one buffered line above the M, buffered lines above and below, a buffered square frame, then a double-square frame. |
 
 ### Optional Panel Text
 
@@ -188,7 +188,7 @@ PDF rendering receives the resolved badges, page size, panel layouts, and mirror
 9. Writes selected layout options into PDF metadata.
 10. Draws an error placeholder if an asset cannot be fetched or rendered.
 
-Before API, MCP, or browser PDF generation starts, the server verifies that every resolved badge asset can be fetched and parsed by the appropriate SVG or raster renderer. JSON API and MCP requests fail closed by default with structured `asset_verification_failed` errors. API and MCP callers can set `allow_partial=true` to receive a best-effort PDF with placeholders and warnings for failed assets, while browser PDF downloads use the same partial-render behavior automatically so a single broken asset does not block the download.
+Before API, MCP, or browser PDF generation starts, the server verifies that every resolved badge asset can be fetched and parsed by the appropriate SVG or raster renderer. JSON API and MCP requests fail closed by default with structured `asset_verification_failed` errors. API and MCP callers can set `allow_partial=true` to receive a best-effort PDF with placeholders and warnings for failed assets, while browser PDF downloads use the same partial-render behavior automatically so a single broken asset does not block the download. PDF preflight failures and partial renders emit structured JSON log events named `pdf_generation_failed` or `pdf_generation_partial` with route, reason, and failure-count fields.
 
 ## Validation and Defaults
 
