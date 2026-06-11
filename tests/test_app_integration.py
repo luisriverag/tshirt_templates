@@ -4,6 +4,7 @@ pytest.importorskip("flask")
 
 import base64
 import json
+import logging
 import sys
 from io import BytesIO
 from types import SimpleNamespace
@@ -19,6 +20,10 @@ DEMO_BADGE = Badge(
     raw_url="/static/demo-badge.svg",
     extension=".svg",
 )
+
+
+def _logged_events(caplog):
+    return [json.loads(record.message) for record in caplog.records if record.message.startswith("{")]
 
 
 def test_index_renders_badge_picker(monkeypatch):
@@ -88,6 +93,8 @@ def test_index_renders_badge_picker(monkeypatch):
     assert b'id="text-size-input" min="8" max="72" step="1" value="28"' in response.data
     assert b"Font for front/back panel labels." in response.data
     assert b'class="info-hint"' in response.data
+    assert b'<summary aria-label="More information">i</summary>' in response.data
+    assert "ⓘ".encode() not in response.data
     assert response.data.find(b"Upload badge artwork") < response.data.find(b"Template options")
     assert response.data.find(b"Optional: mug/canteen curved adapter effect") < response.data.find(b"3. PDF output")
     assert b"Ubuntu" in response.data
@@ -391,7 +398,8 @@ def test_pdf_route_renders_with_placeholder_when_asset_verification_fails(monkey
     assert kwargs["metadata"]["asset_failures"] == "1"
     assert kwargs["metadata"]["allow_partial"] == "true"
 
-def test_refresh_route_clears_cache_and_redirects(monkeypatch):
+def test_refresh_route_clears_cache_and_redirects(monkeypatch, caplog):
+    caplog.set_level(logging.INFO)
     called = []
     monkeypatch.setattr("tshirt_templates.app.refresh_badges", lambda: called.append(True))
     app = create_app()
@@ -401,6 +409,7 @@ def test_refresh_route_clears_cache_and_redirects(monkeypatch):
     assert response.status_code == 302
     assert response.headers["Location"] == "/"
     assert called == [True]
+    assert {"event": "badge_refresh", "source": "browser"} in _logged_events(caplog)
 
 
 def test_preview_saves_uploaded_badges(monkeypatch, tmp_path):
@@ -583,7 +592,8 @@ def test_api_health_options_and_badges(monkeypatch):
     assert [badge["id"] for badge in badges.json["badges"]] == [DEMO_BADGE.id, "makespace-logo"]
 
 
-def test_api_uploads_saves_badges(monkeypatch, tmp_path):
+def test_api_uploads_saves_badges(monkeypatch, tmp_path, caplog):
+    caplog.set_level(logging.INFO)
     monkeypatch.setattr("tshirt_templates.badges.list_badges", lambda: [DEMO_BADGE])
     app = create_app()
     app.config["UPLOAD_FOLDER"] = str(tmp_path)
@@ -601,6 +611,12 @@ def test_api_uploads_saves_badges(monkeypatch, tmp_path):
     assert uploaded["source"] == "upload"
     assert response.json["warnings"][0]["code"] == "missing_dimensions"
     assert (tmp_path / uploaded["id"].removeprefix("upload:")).exists()
+    assert {
+        "badge_count": 1,
+        "event": "upload_saved",
+        "route": "/api/v1/uploads",
+        "warning_count": 1,
+    } in _logged_events(caplog)
 
 
 def test_api_uploads_rejects_empty_payload(tmp_path):
@@ -882,7 +898,8 @@ def test_pdf_route_passes_dragged_panel_text_positions(monkeypatch):
     assert panel_text["size"] == "30"
     assert panel_text["positions"]["front"] == {"x": 180.0, "y": 576.0}
 
-def test_api_pdf_verifies_assets_before_rendering(monkeypatch):
+def test_api_pdf_verifies_assets_before_rendering(monkeypatch, caplog):
+    caplog.set_level(logging.WARNING)
     render_calls = []
     monkeypatch.setattr("tshirt_templates.badges.list_badges", lambda: [DEMO_BADGE])
     monkeypatch.setitem(
@@ -906,6 +923,12 @@ def test_api_pdf_verifies_assets_before_rendering(monkeypatch):
     assert response.json["error"]["code"] == "asset_verification_failed"
     assert response.json["error"]["failures"][0]["badge_id"] == DEMO_BADGE.id
     assert render_calls == []
+    assert {
+        "event": "pdf_generation_failed",
+        "failure_count": 1,
+        "reason": "asset_verification_failed",
+        "route": "/api/v1/pdfs",
+    } in _logged_events(caplog)
 
 
 def test_api_pdf_can_allow_partial_asset_failures(monkeypatch):

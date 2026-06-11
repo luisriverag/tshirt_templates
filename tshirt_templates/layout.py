@@ -458,41 +458,54 @@ def _m_no_shrink_fallback_slots(count: int) -> list[tuple[int, int]]:
     if count <= len(slots):
         return slots
 
+    # Keep an empty grid lane between the fixed-size M and every overflow
+    # treatment so the lines/frames read as separate accents instead of
+    # touching the pixel-art letter.
+    buffer_cells = 1
+    top_line = -(buffer_cells + 1)
+    bottom_line = base_rows + buffer_cells
+
     fallback_slots: list[tuple[int, int]] = []
-    fallback_slots.extend((-1, col) for col in range(base_cols))
+    fallback_slots.extend((top_line, col) for col in range(base_cols))
     if count <= len(slots) + len(fallback_slots):
         return slots + fallback_slots
 
-    fallback_slots.extend((base_rows, col) for col in range(base_cols))
+    fallback_slots.extend((bottom_line, col) for col in range(base_cols))
     if count <= len(slots) + len(fallback_slots):
         return slots + fallback_slots
 
+    inner_min = -(buffer_cells + 1)
+    inner_max = base_rows + buffer_cells
     inner_frame_slots = [
         (row, col)
-        for row in range(-1, base_rows + 1)
-        for col in range(-1, base_cols + 1)
-        if row in {-1, base_rows} or col in {-1, base_cols}
+        for row in range(inner_min, inner_max + 1)
+        for col in range(inner_min, inner_max + 1)
+        if row in {inner_min, inner_max} or col in {inner_min, inner_max}
     ]
     fallback_slots = inner_frame_slots
     if count <= len(slots) + len(fallback_slots):
         return slots + fallback_slots
 
+    outer_min = inner_min - 1
+    outer_max = inner_max + 1
     outer_frame_slots = [
         (row, col)
-        for row in range(-2, base_rows + 2)
-        for col in range(-2, base_cols + 2)
-        if row in {-2, base_rows + 1} or col in {-2, base_cols + 1}
+        for row in range(outer_min, outer_max + 1)
+        for col in range(outer_min, outer_max + 1)
+        if row in {outer_min, outer_max} or col in {outer_min, outer_max}
     ]
     fallback_slots += outer_frame_slots
-    ring = 3
+    next_min = outer_min - 1
+    next_max = outer_max + 1
     while len(slots) + len(fallback_slots) < count:
         fallback_slots.extend(
             (row, col)
-            for row in range(-ring, base_rows + ring)
-            for col in range(-ring, base_cols + ring)
-            if row in {-ring, base_rows + ring - 1} or col in {-ring, base_cols + ring - 1}
+            for row in range(next_min, next_max + 1)
+            for col in range(next_min, next_max + 1)
+            if row in {next_min, next_max} or col in {next_min, next_max}
         )
-        ring += 1
+        next_min -= 1
+        next_max += 1
     return slots + fallback_slots
 
 

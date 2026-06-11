@@ -29,7 +29,6 @@ This backlog only tracks work that is not already available in the current app. 
 
 ## Reliability and Operations
 
-- Add structured logging for badge refreshes, uploads, and PDF generation failures.
 - Add upload cleanup jobs for stale local assets.
 - Add cache metrics for upstream badge discovery.
 - Add rate limiting for upload and PDF generation routes.

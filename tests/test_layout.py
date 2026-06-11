@@ -225,7 +225,11 @@ def test_m_pixel_no_shrink_layout_uses_line_above_for_overflow():
     row_positions = sorted({round(placement.y, 3) for placement in placements})
 
     assert len(placements) == 14
+    adjacent_gap = row_positions[1] - row_positions[0]
+    overflow_gap = row_positions[-1] - row_positions[-2]
+
     assert len(row_positions) == 6
+    assert overflow_gap > adjacent_gap * 1.5
     assert {placement.width for placement in placements} == {72.0}
     assert [placement.badge_id for placement in placements] == [
         f"badge-{index}" for index in range(14)
@@ -233,7 +237,7 @@ def test_m_pixel_no_shrink_layout_uses_line_above_for_overflow():
 
 
 def test_m_pixel_no_shrink_layout_expands_to_square_fallbacks_without_shrinking():
-    cases = [(23, 5, 7), (37, 7, 7), (69, 9, 9)]
+    cases = [(23, 5, 7), (37, 9, 9), (69, 11, 10)]
 
     for count, expected_columns, expected_rows in cases:
         _, layouts = place_badges(
