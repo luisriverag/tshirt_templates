@@ -408,6 +408,7 @@ def _border_positions(ids: list[str], panel: tuple[float, float, float, float], 
 
 
 MIN_M_PIXEL_GRID_SIZE = 5
+M_PIXEL_OVERFLOW_LINES = (2, 3)
 
 
 def _m_pixel_slots(cols: int, rows: int) -> list[tuple[int, int]]:
@@ -448,6 +449,102 @@ def _m_pixel_badge_ids(ids: list[str], slots: int) -> list[str]:
     return [ids[index % len(ids)] for index in range(slots)]
 
 
+def _row_counts_for_lines(count: int, lines: int) -> list[int]:
+    """Return balanced row counts for a fixed number of centered lines."""
+
+    base_count, extra = divmod(count, lines)
+    return [base_count + (1 if row < extra else 0) for row in range(lines)]
+
+
+def _line_positions_fit(
+    count: int,
+    panel: tuple[float, float, float, float],
+    badge_size: float,
+    spacing: float,
+    lines: int,
+) -> bool:
+    """Return whether badges can be drawn at the requested size in this many lines."""
+
+    if count <= 0:
+        return True
+    _, _, width, height = panel
+    row_counts = _row_counts_for_lines(count, lines)
+    max_row_count = max(row_counts, default=0)
+    total_width = max_row_count * badge_size + max(0, max_row_count - 1) * spacing
+    total_height = lines * badge_size + max(0, lines - 1) * spacing
+    return total_width <= width + 0.01 and total_height <= height + 0.01
+
+
+def _line_spacing_for_size(
+    count: int,
+    panel: tuple[float, float, float, float],
+    badge_size: float,
+    requested_spacing: float,
+    lines: int,
+) -> float:
+    """Return spacing that fits fixed-size badges when possible, without scaling artwork."""
+
+    if count <= 0 or requested_spacing <= 0:
+        return max(0.0, requested_spacing)
+
+    _, _, width, height = panel
+    max_row_count = max(_row_counts_for_lines(count, lines), default=1)
+    horizontal_gaps = max(0, max_row_count - 1)
+    vertical_gaps = max(0, lines - 1)
+    spacing_limits = [requested_spacing]
+    if horizontal_gaps:
+        spacing_limits.append((width - max_row_count * badge_size) / horizontal_gaps)
+    if vertical_gaps:
+        spacing_limits.append((height - lines * badge_size) / vertical_gaps)
+    return max(0.0, min(spacing_limits))
+
+
+def _m_pixel_overflow_line_positions(
+    ids: list[str],
+    panel: tuple[float, float, float, float],
+    badge_size: float,
+    spacing: float,
+    preferred_lines: int | None = None,
+) -> list[Placement]:
+    """Place crowded M badges as two or three centered lines without shrinking artwork."""
+
+    x, y, width, height = panel
+    if not ids:
+        return []
+
+    line_options = [preferred_lines] if preferred_lines else list(M_PIXEL_OVERFLOW_LINES)
+    lines = line_options[-1]
+    for candidate_lines in line_options:
+        if _line_positions_fit(len(ids), panel, badge_size, spacing, candidate_lines):
+            lines = candidate_lines
+            break
+
+    row_counts = _row_counts_for_lines(len(ids), lines)
+    line_spacing = _line_spacing_for_size(len(ids), panel, badge_size, spacing, lines)
+    row_gap = badge_size + line_spacing
+    total_height = lines * badge_size + max(0, lines - 1) * line_spacing
+    top_y = y + height - (height - total_height) / 2 - badge_size
+
+    placements: list[Placement] = []
+    badge_index = 0
+    for row, row_count in enumerate(row_counts):
+        total_width = row_count * badge_size + max(0, row_count - 1) * line_spacing
+        start_x = x + (width - total_width) / 2
+        placement_y = top_y - row * row_gap
+        for col in range(row_count):
+            placements.append(
+                Placement(
+                    badge_id=ids[badge_index],
+                    x=start_x + col * (badge_size + line_spacing),
+                    y=placement_y,
+                    width=badge_size,
+                    height=badge_size,
+                )
+            )
+            badge_index += 1
+    return placements
+
+
 def _m_pixel_positions(
     ids: list[str],
     panel: tuple[float, float, float, float],
@@ -461,22 +558,18 @@ def _m_pixel_positions(
     cols, rows, slots = _m_pixel_dimensions(max(len(ids), MIN_M_PIXEL_GRID_SIZE))
     max_spacing = min(
         spacing,
-        max(0.0, (width - cols) / max(1, cols - 1)),
-        max(0.0, (height - rows) / max(1, rows - 1)),
+        max(0.0, (width - cols * badge_size) / max(1, cols - 1)),
+        max(0.0, (height - rows * badge_size) / max(1, rows - 1)),
     )
-    pixel_size = max(
-        1.0,
-        min(
-            badge_size,
-            (width - max(0, cols - 1) * max_spacing) / cols,
-            (height - max(0, rows - 1) * max_spacing) / rows,
-        ),
-    )
-    step = pixel_size + max_spacing
-    total_width = cols * pixel_size + max(0, cols - 1) * max_spacing
-    total_height = rows * pixel_size + max(0, rows - 1) * max_spacing
-    start_x = x + max(0, (width - total_width) / 2)
-    top_y = y + height - max(0, (height - total_height) / 2) - pixel_size
+    base_slot_count = len(_m_pixel_slots(MIN_M_PIXEL_GRID_SIZE, MIN_M_PIXEL_GRID_SIZE))
+    if len(ids) > base_slot_count:
+        return _m_pixel_overflow_line_positions(ids, panel, badge_size, spacing)
+
+    total_width = cols * badge_size + max(0, cols - 1) * max_spacing
+    total_height = rows * badge_size + max(0, rows - 1) * max_spacing
+    step = badge_size + max_spacing
+    start_x = x + (width - total_width) / 2
+    top_y = y + height - (height - total_height) / 2 - badge_size
 
     placements: list[Placement] = []
     for badge_id, (row, col) in zip(_m_pixel_badge_ids(ids, len(slots)), slots):
@@ -485,8 +578,8 @@ def _m_pixel_positions(
                 badge_id=badge_id,
                 x=start_x + col * step,
                 y=top_y - row * step,
-                width=pixel_size,
-                height=pixel_size,
+                width=badge_size,
+                height=badge_size,
             )
         )
     return placements

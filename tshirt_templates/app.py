@@ -77,8 +77,14 @@ TEXT_FONTS = {
     "courier": "Courier",
     "dejavu": "DejaVu Sans",
 }
+MIN_UI_BADGE_AMOUNTS = {"cm": 2.5, "in": 1.0}
 BADGE_SIZE_OPTIONS = {
-    unit: sorted(amounts, key=float) for unit, amounts in BADGE_AMOUNTS.items()
+    unit: [
+        amount
+        for amount in sorted(amounts, key=float)
+        if float(amount) >= MIN_UI_BADGE_AMOUNTS[unit]
+    ]
+    for unit, amounts in BADGE_AMOUNTS.items()
 }
 SPACING_OPTIONS = {
     unit: sorted(amounts, key=float) for unit, amounts in SPACING_AMOUNTS.items()
@@ -93,7 +99,7 @@ CURVE_DEVICE_OPTIONS = {
 }
 APP_VERSION = "0.1.0"
 MCP_TRANSPORT = "streamable-http-json-rpc"
-MCP_BADGES_URI_TEMPLATE = "tshirt://badges{?order,include_logo,refresh}"
+MCP_BADGES_URI_TEMPLATE = "tshirt://badges{?order,logo_sides,include_logo,refresh}"
 MCP_METHODS = [
     "initialize",
     "ping",
@@ -270,7 +276,7 @@ def options_payload() -> dict:
             "page_margin": DEFAULT_PAGE_MARGIN_AMOUNTS[DEFAULT_UNIT],
             "panel_gap": DEFAULT_PANEL_GAP_AMOUNTS[DEFAULT_UNIT],
             "include_logo": False,
-            "logo_sides": ["front", "back"],
+            "logo_sides": [],
             "logo_size": DEFAULT_LOGO_AMOUNTS[DEFAULT_UNIT],
             "front_logo_size": DEFAULT_LOGO_AMOUNTS[DEFAULT_UNIT],
             "back_logo_size": DEFAULT_LOGO_AMOUNTS[DEFAULT_UNIT],
@@ -422,6 +428,21 @@ def json_getlist(options: dict):
     return getlist
 
 
+def logo_requested_from_sides(value) -> bool:
+    """Return whether a JSON/query logo_sides value selects any logo side."""
+
+    if value is None or value == "":
+        return False
+    if isinstance(value, str):
+        values = [value]
+    elif isinstance(value, list):
+        values = [str(item) for item in value]
+    else:
+        values = [str(value)]
+    raw_sides = [side for item in values for side in item.replace(",", " ").split()]
+    return any(side in {"front", "back"} for side in raw_sides)
+
+
 def create_app() -> Flask:
     app = Flask(__name__, template_folder="../templates", static_folder="../static")
     app.config.setdefault("UPLOAD_FOLDER", str(Path(app.instance_path) / "uploads"))
@@ -528,7 +549,9 @@ def create_app() -> Flask:
             refresh_badges()
         order = request.args.get("order", "alphabetical")
         badges = order_badges(_available_badges(), order)
-        include_logo = request.args.get("include_logo") in {"1", "true", "yes"}
+        include_logo = request.args.get("include_logo") in {"1", "true", "yes"} or logo_requested_from_sides(
+            request.args.getlist("logo_sides")
+        )
         if include_logo:
             badges = [*badges, LOGO_BADGE]
         return jsonify({"badges": [badge_to_dict(badge) for badge in badges]})
@@ -1286,7 +1309,17 @@ def create_app() -> Flask:
                     "properties": {
                         "refresh": {"type": "boolean"},
                         "order": {"type": "string"},
-                        "include_logo": {"type": "boolean"},
+                        "logo_sides": {
+                            "description": "Preferred: include the MakeSpace logo when one or more panel sides are selected.",
+                            "oneOf": [
+                                {"type": "array", "items": {"type": "string", "enum": ["front", "back"]}},
+                                {"type": "string"},
+                            ],
+                        },
+                        "include_logo": {
+                            "type": "boolean",
+                            "description": "Legacy compatibility flag; prefer logo_sides.",
+                        },
                     },
                 },
             },
@@ -1550,7 +1583,9 @@ def create_app() -> Flask:
             refresh_badges()
         order = str(query.get("order", ["alphabetical"])[0])
         badges = order_badges(_available_badges(), order)
-        if _truthy(query.get("include_logo", [False])[0]):
+        if _truthy(query.get("include_logo", [False])[0]) or logo_requested_from_sides(
+            query.get("logo_sides", [])
+        ):
             badges = [*badges, LOGO_BADGE]
         return badges
 
@@ -1691,7 +1726,9 @@ def create_app() -> Flask:
                     refresh_badges()
                 order = str(arguments.get("order", "alphabetical"))
                 badges = order_badges(_available_badges(), order)
-                if arguments.get("include_logo"):
+                if arguments.get("include_logo") or logo_requested_from_sides(
+                    arguments.get("logo_sides")
+                ):
                     badges = [*badges, LOGO_BADGE]
                 payload = {"badges": [badge_to_dict(badge) for badge in badges]}
                 return _mcp_result(

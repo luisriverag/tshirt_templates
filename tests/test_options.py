@@ -18,7 +18,6 @@ def test_parse_layout_options_accepts_valid_values():
         "page_margin": "0.75",
         "panel_gap": "1.25",
         "copies": "3",
-        "include_logo": "on",
         "logo_size": "3.0",
         "mirror": "on",
         "order": "category",
@@ -109,6 +108,7 @@ def test_parse_layout_options_normalizes_invalid_values():
         page_margin="5",
         panel_gap="0",
         include_logo=False,
+        logo_sides=[],
         logo_size="5.0",
         front_logo_size="5.0",
         back_logo_size="5.0",
@@ -143,6 +143,20 @@ def test_parse_layout_options_defaults_to_both_sides_and_mirror_when_none_are_va
     assert options.mirror is True
     assert options.page_margin == "1.25"
     assert options.panel_gap == "0.85"
+    assert options.logo_sides == []
+
+
+def test_parse_layout_options_enables_logo_from_selected_logo_sides():
+    options = parse_layout_options({}, _getlist({"sides": ["front"], "logo_sides": ["front"]}))
+
+    assert options.include_logo is True
+    assert options.logo_sides == ["front"]
+
+
+def test_parse_layout_options_keeps_legacy_include_logo_compatibility():
+    options = parse_layout_options({"include_logo": "on"}, _getlist({"sides": ["front"]}))
+
+    assert options.include_logo is True
     assert options.logo_sides == ["front", "back"]
 
 

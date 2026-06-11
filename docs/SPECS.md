@@ -129,7 +129,7 @@ Users may select front, back, or both panels. If both panels are selected, the c
 | `spiral` | Badges trail outward from panel center. |
 | `wave` | Badges follow a sine-wave ribbon. |
 | `border` | Badges wrap around panel edges. |
-| `m-pixels` | Badges fill a pixel-art capital M shape, repeating badges if needed. |
+| `m-pixels` | Badges fill a pixel-art capital M shape, repeating badges if needed; crowded selections switch to centered 2-3 line rows while preserving the requested badge artwork size. |
 
 ### Optional Panel Text
 
