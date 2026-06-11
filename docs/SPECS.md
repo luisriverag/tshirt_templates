@@ -130,6 +130,7 @@ Users may select front, back, or both panels. If both panels are selected, the c
 | `wave` | Badges follow a sine-wave ribbon. |
 | `border` | Badges wrap around panel edges. |
 | `m-pixels` | Badges fill a pixel-art capital M shape, repeating badges if needed; larger selections use denser M grids and scale the mosaic down only as needed to stay inside the selected panel. |
+| `m-pixels-no-shrink` | Badges fill a fixed-size pixel-art capital M without reducing badge size; overflow falls back to one line above the M, lines above and below, a square frame, then a double-square frame. |
 
 ### Optional Panel Text
 
@@ -217,7 +218,7 @@ Users can download a calibration PDF with centimeter/inch rulers and mirror guid
 
 ## API and MCP Serialization
 
-The API implementation serializes badges, panel layouts, and placements with both selected display units and raw PDF point values. JSON layout requests also accept optional manual placement overrides addressed by layout and placement indexes. Saved template files are stored under the configured Flask `TEMPLATE_FOLDER` as safe-name JSON files containing `badge_ids`, `options`, optional `manual_placements`, and created/updated timestamps. The CLI `serve` command starts the same Flask app that serves the browser UI, `/api/v1`, and `/mcp`; the CLI `generate-pdf` command uses the same JSON request shape as `/api/v1/pdfs`. The MCP endpoint reuses the same serializers through `get_options`, `list_badges`, and `compute_layout` tools, and mirrors saved template file operations through `list_saved_templates`, `save_template`, `get_saved_template`, and `delete_saved_template`.
+The API implementation serializes badges, panel layouts, placements, layout-mode labels, and layout-mode behavior details with both selected display units and raw PDF point values. JSON layout requests also accept optional manual placement overrides addressed by layout and placement indexes. Saved template files are stored under the configured Flask `TEMPLATE_FOLDER` as safe-name JSON files containing `badge_ids`, `options`, optional `manual_placements`, and created/updated timestamps. The CLI `serve` command starts the same Flask app that serves the browser UI, `/api/v1`, and `/mcp`; the CLI `generate-pdf` command uses the same JSON request shape as `/api/v1/pdfs`. The MCP endpoint reuses the same serializers through `get_options`, `list_badges`, and `compute_layout` tools, and mirrors saved template file operations through `list_saved_templates`, `save_template`, `get_saved_template`, and `delete_saved_template`.
 
 ## Testing Strategy
 
@@ -225,9 +226,9 @@ The test suite covers:
 
 - Badge discovery, fallback, upload acceptance, and ordering helpers.
 - Option parsing, defaulting, validation, and unit conversion.
-- Layout page sizes, orientation, placement bounds, copies, and layout modes.
+- Layout page sizes, orientation, placement bounds, copies, and layout modes, including no-shrink M overflow fallback behavior.
 - Flask route rendering for index, quick print guidance, grouped UI controls, live badge summaries, preview, refresh, uploads, calibration, and PDF download behavior.
-- JSON API health/readiness/options/badges/upload/layout/PDF/template routes and MCP resource/tool/prompt responses.
+- JSON API health/readiness/options/badges/upload/layout/PDF/template routes and MCP resource/tool/prompt responses, including layout-mode metadata and MCP mode schema enums.
 - CLI generation from JSON template files and the unified `serve` command.
 - Manual coordinate conversion into PDF layout placements.
 - PDF smoke checks for page dimensions, placement counts, metadata, calibration output, and asset verification failures.

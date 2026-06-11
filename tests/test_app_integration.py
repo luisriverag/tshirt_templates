@@ -43,6 +43,7 @@ def test_index_renders_badge_picker(monkeypatch):
     assert b"Measure curves" not in response.data
     assert b'href="/calibration.pdf"' in response.data
     assert b"M pixel shape" in response.data
+    assert b"M pixel shape (no shrink)" in response.data
     assert b"Circle wreath" in response.data
     assert b"Spiral trail" in response.data
     assert b"Wave ribbon" in response.data
@@ -559,6 +560,14 @@ def test_api_health_options_and_badges(monkeypatch):
     assert options.json["defaults"]["page_margin"] == "1.25"
     assert options.json["defaults"]["panel_gap"] == "0.85"
     assert options.json["defaults"]["logo_sides"] == []
+    assert options.json["layout_modes"]["m-pixels-no-shrink"] == "M pixel shape (no shrink)"
+    assert options.json["layout_mode_details"]["m-pixels-no-shrink"]["shrinks_badges"] is False
+    assert options.json["layout_mode_details"]["m-pixels-no-shrink"]["fallbacks"] == [
+        "line-above",
+        "lines-above-and-below",
+        "square-frame",
+        "double-square-frame",
+    ]
     assert options.json["text_fonts"]["ubuntu"] == "Ubuntu"
     assert options.json["text_fonts"]["fredoka-one"] == "Fredoka One"
     assert options.json["curve_device_options"]["mug"] == "Standard mug"
@@ -724,6 +733,42 @@ def test_api_layout_preview_computes_json_layout_with_logo(monkeypatch):
     assert front_placements[0]["rotation"] == 12.0
     assert front_placements[-1]["width"] == 1.0
     assert back_placements[-1]["width"] == 3.0
+
+
+def test_api_layout_preview_accepts_m_pixel_no_shrink_mode(monkeypatch):
+    badges = [
+        Badge(
+            id=f"badge-{index}.svg",
+            name=f"Badge {index}",
+            path=f"badge-{index}.svg",
+            raw_url=f"/static/badge-{index}.svg",
+            extension=".svg",
+        )
+        for index in range(14)
+    ]
+    monkeypatch.setattr("tshirt_templates.badges.list_badges", lambda: badges)
+    app = create_app()
+
+    response = app.test_client().post(
+        "/api/v1/layouts/preview",
+        json={
+            "badge_ids": [badge.id for badge in badges],
+            "options": {
+                "sides": ["front"],
+                "mode": "m-pixels-no-shrink",
+                "unit": "in",
+                "badge_size": "1.0",
+                "spacing": "0.1",
+            },
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.json["options"]["mode"] == "m-pixels-no-shrink"
+    placements = response.json["layouts"][0]["placements"]
+    assert len(placements) == 14
+    assert {placement["width"] for placement in placements} == {1.0}
+    assert len({round(placement["y"], 3) for placement in placements}) == 6
 
 
 def test_api_layout_preview_can_limit_logo_to_one_side(monkeypatch):
@@ -973,6 +1018,26 @@ def test_mcp_metadata_resources_prompts_and_tools(monkeypatch):
     assert initialized.status_code == 200
     assert initialized.json["result"] == {}
     assert tools.status_code == 200
+    tool_payloads = {tool["name"]: tool for tool in tools.json["result"]["tools"]}
+    expected_modes = {
+        "grid",
+        "rows",
+        "diagonal",
+        "scatter",
+        "circle",
+        "spiral",
+        "wave",
+        "border",
+        "m-pixels",
+        "m-pixels-no-shrink",
+    }
+    compute_mode_schema = tool_payloads["compute_layout"]["inputSchema"]["properties"]["options"]["properties"]["mode"]
+    render_mode_schema = tool_payloads["render_pdf"]["inputSchema"]["properties"]["options"]["properties"]["mode"]
+    validate_mode_schema = tool_payloads["validate_template"]["inputSchema"]["properties"]["options"]["properties"]["mode"]
+    assert set(compute_mode_schema["enum"]) == expected_modes
+    assert set(render_mode_schema["enum"]) == expected_modes
+    assert set(validate_mode_schema["enum"]) == expected_modes
+    assert "preserve badge size" in compute_mode_schema["description"]
     assert {tool["name"] for tool in tools.json["result"]["tools"]} >= {
         "get_options",
         "list_badges",
@@ -997,7 +1062,15 @@ def test_mcp_metadata_resources_prompts_and_tools(monkeypatch):
     assert json.loads(options_resource["text"])["defaults"]["text_font"] == "ubuntu"
     assert json.loads(options_resource["text"])["defaults"]["text_size"] == "28"
     assert json.loads(options_resource["text"])["defaults"]["page_margin"] == "1.25"
-    assert json.loads(options_resource["text"])["defaults"]["logo_sides"] == []
+    options_payload = json.loads(options_resource["text"])
+    assert options_payload["defaults"]["logo_sides"] == []
+    assert options_payload["layout_modes"]["m-pixels-no-shrink"] == "M pixel shape (no shrink)"
+    assert options_payload["layout_mode_details"]["m-pixels-no-shrink"]["fallbacks"] == [
+        "line-above",
+        "lines-above-and-below",
+        "square-frame",
+        "double-square-frame",
+    ]
     assert read_badges.status_code == 200
     badges_resource = read_badges.json["result"]["contents"][0]
     assert json.loads(badges_resource["text"])["badges"][0]["id"] == DEMO_BADGE.id
