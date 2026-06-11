@@ -95,7 +95,10 @@ Design goals:
   "page_margin": "1.25",
   "panel_gap": "0.85",
   "include_logo": false,
+  "logo_sides": [],
   "logo_size": "5.0",
+  "front_logo_size": "5.0",
+  "back_logo_size": "5.0",
   "copies": 1,
   "order": "selected",
   "sides": ["front", "back"],
@@ -201,6 +204,8 @@ Query parameters:
 | `refresh` | boolean | `false` | If true, clears cache before listing. |
 | `source` | string | `all` | Future filter: `upstream`, `upload`, `fallback`, or `all`. |
 | `order` | string | `alphabetical` | Catalog display order. |
+| `logo_sides` | string or repeated string | none | Preferred way to append the reserved MakeSpace logo badge when one or more values are `front` or `back`. Accepts repeated query values or comma-separated sides. |
+| `include_logo` | boolean | `false` | Legacy compatibility flag that also appends the reserved MakeSpace logo badge. Prefer `logo_sides`. |
 
 ### `POST /api/v1/uploads`
 
@@ -294,8 +299,10 @@ Request:
     "spacing": "0.5",
     "page_margin": "1.25",
     "panel_gap": "0.85",
-    "include_logo": false,
+    "logo_sides": [],
     "logo_size": "5.0",
+    "front_logo_size": "5.0",
+    "back_logo_size": "5.0",
     "copies": 1,
     "order": "selected",
     "sides": ["front", "back"],
@@ -310,7 +317,7 @@ Request:
 }
 ```
 
-`page_margin` controls the outer content inset, and `panel_gap` controls the space between front/back panels when both are selected. Both use the selected `unit`. `front_text` and `back_text` are optional short labels rendered on the matching panel. `text_font` accepts the values returned by `/api/v1/options` and defaults to `ubuntu`. `include_curve_effect` adds a cylindrical mug/canteen adapter effect in generated PDFs. `curve_device` may be `custom`, `mug`, `skinny-tumbler`, or `canteen`; `/api/v1/options` returns both `curve_device_options` labels and `curve_device_diameters` preset values. Presets provide a starting diameter, and `curve_diameter` may override it with the exact outside device/heater-adapter diameter in the selected `unit`.
+`page_margin` controls the outer content inset, and `panel_gap` controls the space between front/back panels when both are selected. Both use the selected `unit`. `logo_sides` controls MakeSpace logo placement: use `["front"]`, `["back"]`, or `["front", "back"]` to include the logo on those panels; omit it or send an empty array for no logo. The legacy `include_logo: true` option is still accepted and defaults to both logo sides when `logo_sides` is absent. `front_text` and `back_text` are optional short labels rendered on the matching panel. `text_font` accepts the values returned by `/api/v1/options` and defaults to `ubuntu`. `include_curve_effect` adds a cylindrical mug/canteen adapter effect in generated PDFs. `curve_device` may be `custom`, `mug`, `skinny-tumbler`, or `canteen`; `/api/v1/options` returns both `curve_device_options` labels and `curve_device_diameters` preset values. Presets provide a starting diameter, and `curve_diameter` may override it with the exact outside device/heater-adapter diameter in the selected `unit`.
 
 Manual placements are optional. Items are addressed by `layout_index` and `placement_index`, with `x`/`y` supplied in the selected unit from the preview top-left coordinate space.
 
@@ -346,8 +353,10 @@ Request:
     "spacing": "0.5",
     "page_margin": "1.25",
     "panel_gap": "0.85",
-    "include_logo": false,
+    "logo_sides": [],
     "logo_size": "5.0",
+    "front_logo_size": "5.0",
+    "back_logo_size": "5.0",
     "copies": 1,
     "order": "selected",
     "sides": ["front", "back"],
@@ -500,7 +509,7 @@ The server exposes badge catalog and layout option resources, saved template res
 | --- | --- | --- |
 | `tshirt://options` | Implemented | Current supported options and defaults, matching `/api/v1/options`. |
 | `tshirt://badges` | Implemented | Alphabetically ordered available badge catalog. |
-| `tshirt://badges{?order,include_logo,refresh}` | Implemented | Resource template for client-selected ordering, optional logo inclusion, and cache refresh. |
+| `tshirt://badges{?order,logo_sides,include_logo,refresh}` | Implemented | Resource template for client-selected ordering, preferred `logo_sides` logo inclusion, legacy `include_logo`, and cache refresh. |
 | `tshirt://templates` | Implemented | Saved local JSON template summaries. |
 | `tshirt://templates/{name}` | Implemented | One saved local JSON template by name. |
 | `tshirt://layouts/{id}` | Future | Persisted or temporary computed layout. |
@@ -534,11 +543,12 @@ Inputs:
 ```json
 {
   "refresh": false,
-  "order": "alphabetical"
+  "order": "alphabetical",
+  "logo_sides": ["front"]
 }
 ```
 
-Outputs a badge list. Optional `include_logo: true` appends the reserved MakeSpace logo badge.
+Outputs a badge list. Preferred `logo_sides` values of `front` and/or `back` append the reserved MakeSpace logo badge so agents can mirror the browser UI. Legacy `include_logo: true` is still accepted for compatibility.
 
 #### `get_options`
 

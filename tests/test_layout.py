@@ -172,7 +172,27 @@ def test_m_pixel_layout_repeats_selected_badges_to_fill_shape():
     assert {placement.badge_id for placement in placements} == {"alpha", "beta"}
 
 
-def test_m_pixel_layout_shrinks_pixels_to_fit_the_panel():
+def test_crowded_m_pixel_layout_uses_two_or_three_lines_without_shrinking_badges():
+    _, layouts = place_badges(
+        [f"badge-{index}" for index in range(14)],
+        ["front"],
+        mode="m-pixels",
+        badge_size_inches=1.0,
+        spacing_inches=0.1,
+    )
+
+    placements = layouts[0].placements
+    distinct_rows = {round(placement.y, 3) for placement in placements}
+
+    assert len(placements) == 14
+    assert len(distinct_rows) in {2, 3}
+    assert {placement.width for placement in placements} == {72.0}
+    assert [placement.badge_id for placement in placements] == [
+        f"badge-{index}" for index in range(14)
+    ]
+
+
+def test_m_pixel_layout_never_shrinks_below_requested_size():
     _, layouts = place_badges(
         [f"badge-{index}" for index in range(25)],
         ["front", "back"],
@@ -182,7 +202,11 @@ def test_m_pixel_layout_shrinks_pixels_to_fit_the_panel():
     )
 
     assert all(len(layout.placements) == 25 for layout in layouts)
-    assert all(placement.width < 4.0 * 72 for layout in layouts for placement in layout.placements)
+    assert all(
+        placement.width == 4.0 * 72 and placement.height == 4.0 * 72
+        for layout in layouts
+        for placement in layout.placements
+    )
 
 
 def test_layout_can_use_different_badges_per_side():

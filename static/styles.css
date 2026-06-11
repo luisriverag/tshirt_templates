@@ -52,6 +52,16 @@ h2 { margin: 0 0 18px; color: var(--primary-color); text-transform: uppercase; l
 .curve-helper { display: grid; gap: 6px; align-self: stretch; padding: 12px; border: 1px solid var(--line-color); border-radius: var(--border-radius); background: var(--surface-color); }
 .curve-helper strong { color: var(--primary-color); text-transform: uppercase; }
 .upload-dropzone { border: 2px dashed var(--line-color); border-radius: var(--border-radius); padding: 14px; background: rgba(0,0,0,.18); }
+.context-help { display: flex; align-items: center; gap: 8px; width: fit-content; margin: 8px 0 12px; color: #cfcfbd; font-weight: 800; }
+.label-row { display: inline-flex; align-items: center; gap: 7px; flex-wrap: wrap; }
+.info-hint { position: relative; display: inline-flex; align-items: center; width: fit-content; vertical-align: middle; }
+.info-hint summary { display: inline-grid; place-items: center; width: 1.25rem; height: 1.25rem; border: 2px solid var(--primary-color); border-radius: 999px; color: var(--primary-color); background: var(--surface-color); font-size: .78rem; font-weight: 900; line-height: 1; cursor: pointer; list-style: none; }
+.info-hint summary::-webkit-details-marker { display: none; }
+.info-hint summary:hover, .info-hint summary:focus-visible { color: var(--secondary-color); background: var(--primary-color); outline: none; }
+.info-hint summary:focus-visible { box-shadow: 0 0 0 3px rgba(255,255,0,.34); }
+.hint-bubble { display: none; position: absolute; left: 0; top: calc(100% + 8px); z-index: 12; width: max-content; max-width: min(320px, 82vw); padding: 10px 12px; border: 2px solid var(--primary-color); border-radius: var(--border-radius); color: var(--text-color); background: var(--surface-color); box-shadow: 5px 5px 0 var(--secondary-color); font-size: .82rem; font-weight: 700; line-height: 1.35; text-transform: none; }
+.info-hint:hover .hint-bubble, .info-hint[open] .hint-bubble, .info-hint:focus-within .hint-bubble { display: block; }
+.control-grid > label:nth-child(4n) .hint-bubble, .badge-toolbar label:nth-child(4n) .hint-bubble { left: auto; right: 0; }
 label { display: grid; gap: 7px; font-weight: 800; }
 small, .hint { color: #cfcfbd; font-weight: 700; }
 input, select, button { font: inherit; }

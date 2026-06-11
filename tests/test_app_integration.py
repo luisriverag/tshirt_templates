@@ -56,9 +56,10 @@ def test_index_renders_badge_picker(monkeypatch):
     assert b"page-margin-input" in response.data
     assert b'name="page_margin" id="page-margin-input" min="0" max="5" step="0.01"' in response.data
     assert b'name="panel_gap" id="panel-gap-input" min="0" max="10" step="0.01"' in response.data
-    assert b"Only common print-cut sizes" in response.data
-    assert b"Include MakeSpace logo" in response.data
-    assert b"Logo size" in response.data
+    assert b"Badge size choices start at 2.5 cm / 1 in" in response.data
+    assert b"Include MakeSpace logo" not in response.data
+    assert b"Logo on front" in response.data
+    assert b"Logo on back" in response.data
     assert b"Badge order" in response.data
     assert b"Badges are selected by default for both sides, except badge-template.png" in response.data
     assert b"selected-badge-count" in response.data
@@ -85,6 +86,9 @@ def test_index_renders_badge_picker(monkeypatch):
     assert b"Text size" in response.data
     assert b'id="text-size-input" min="8" max="72" step="1" value="28"' in response.data
     assert b"Font for front/back panel labels." in response.data
+    assert b'class="info-hint"' in response.data
+    assert response.data.find(b"Upload badge artwork") < response.data.find(b"Template options")
+    assert response.data.find(b"Optional: mug/canteen curved adapter effect") < response.data.find(b"3. PDF output")
     assert b"Ubuntu" in response.data
     assert b"Alphabetical" in response.data
     assert b"By category" in response.data
@@ -485,7 +489,7 @@ def test_preview_can_include_makespace_logo(monkeypatch):
             "badges": [DEMO_BADGE.id],
             "sides": ["front"],
             "mode": "grid",
-            "include_logo": "on",
+            "logo_sides": ["front"],
             "logo_size": "5.0",
         },
     )
@@ -515,7 +519,7 @@ def test_pdf_route_includes_makespace_logo_placement(monkeypatch):
             "mode": "grid",
             "unit": "in",
             "badge_size": "1.0",
-            "include_logo": "on",
+            "logo_sides": ["front"],
             "logo_size": "3.0",
         },
     )
@@ -536,7 +540,7 @@ def test_api_health_options_and_badges(monkeypatch):
     health = client.get("/api/v1/health")
     ready = client.get("/api/v1/ready")
     options = client.get("/api/v1/options")
-    badges = client.get("/api/v1/badges?include_logo=true")
+    badges = client.get("/api/v1/badges?logo_sides=front")
 
     assert health.status_code == 200
     assert health.json == {"status": "ok", "service": "tshirt_templates"}
@@ -554,11 +558,18 @@ def test_api_health_options_and_badges(monkeypatch):
     assert options.json["defaults"]["curve_diameter"] == "8.0"
     assert options.json["defaults"]["page_margin"] == "1.25"
     assert options.json["defaults"]["panel_gap"] == "0.85"
+    assert options.json["defaults"]["logo_sides"] == []
     assert options.json["text_fonts"]["ubuntu"] == "Ubuntu"
     assert options.json["text_fonts"]["fredoka-one"] == "Fredoka One"
     assert options.json["curve_device_options"]["mug"] == "Standard mug"
     assert options.json["curve_device_diameters"]["mug"]["cm"] == "8.2"
     assert options.json["logo_size_options"]["cm"]
+    assert options.json["badge_size_options"]["cm"][0] == "2.5"
+    assert options.json["badge_size_options"]["in"][0] == "1.0"
+    index_html = client.get("/").data
+    badge_select_html = index_html.split(b'id="badge-size-select"', 1)[1].split(b"</select>", 1)[0]
+    assert b'value="1.0"' not in badge_select_html
+    assert b'value="2.5"' in badge_select_html
     assert badges.status_code == 200
     assert [badge["id"] for badge in badges.json["badges"]] == [DEMO_BADGE.id, "makespace-logo"]
 
@@ -674,7 +685,7 @@ def test_api_layout_preview_computes_json_layout_with_logo(monkeypatch):
                 "unit": "in",
                 "badge_size": "1.0",
                 "spacing": "0.2",
-                "include_logo": True,
+                "logo_sides": ["front", "back"],
                 "logo_size": "2.0",
                 "front_logo_size": "1.0",
                 "back_logo_size": "3.0",
@@ -727,7 +738,6 @@ def test_api_layout_preview_can_limit_logo_to_one_side(monkeypatch):
                 "sides": ["front", "back"],
                 "unit": "in",
                 "badge_size": "1.0",
-                "include_logo": True,
                 "logo_sides": ["front"],
                 "front_logo_size": "1.0",
                 "back_logo_size": "3.0",
@@ -987,13 +997,14 @@ def test_mcp_metadata_resources_prompts_and_tools(monkeypatch):
     assert json.loads(options_resource["text"])["defaults"]["text_font"] == "ubuntu"
     assert json.loads(options_resource["text"])["defaults"]["text_size"] == "28"
     assert json.loads(options_resource["text"])["defaults"]["page_margin"] == "1.25"
+    assert json.loads(options_resource["text"])["defaults"]["logo_sides"] == []
     assert read_badges.status_code == 200
     badges_resource = read_badges.json["result"]["contents"][0]
     assert json.loads(badges_resource["text"])["badges"][0]["id"] == DEMO_BADGE.id
     assert resource_templates.status_code == 200
     templates_payload = resource_templates.json["result"]["resourceTemplates"]
     assert {template["uriTemplate"] for template in templates_payload} >= {
-        "tshirt://badges{?order,include_logo,refresh}",
+        "tshirt://badges{?order,logo_sides,include_logo,refresh}",
         "tshirt://templates/{name}",
     }
     assert prompts.status_code == 200
@@ -1305,7 +1316,7 @@ def test_api_index_and_mcp_batch_and_resource_template_queries(monkeypatch):
                 "jsonrpc": "2.0",
                 "id": 2,
                 "method": "tools/call",
-                "params": {"name": "list_badges", "input": {"include_logo": True}},
+                "params": {"name": "list_badges", "input": {"logo_sides": ["front"]}},
             },
         ],
     )
@@ -1315,7 +1326,7 @@ def test_api_index_and_mcp_batch_and_resource_template_queries(monkeypatch):
             "jsonrpc": "2.0",
             "id": 3,
             "method": "resources/read",
-            "params": {"uri": "tshirt://badges?include_logo=true"},
+            "params": {"uri": "tshirt://badges?logo_sides=front"},
         },
     )
     mixed_batch = client.post(
@@ -1331,7 +1342,7 @@ def test_api_index_and_mcp_batch_and_resource_template_queries(monkeypatch):
     assert api_index.status_code == 200
     assert api_index.json["documentation"]["repository_path"] == "docs/APIDOCS.md"
     assert api_index.json["mcp"]["endpoint"] == "/mcp"
-    assert api_index.json["mcp"]["resource_templates"] == ["tshirt://badges{?order,include_logo,refresh}"]
+    assert api_index.json["mcp"]["resource_templates"] == ["tshirt://badges{?order,logo_sides,include_logo,refresh}"]
     assert "no required MCP port" in api_index.json["mcp"]["port_note"]
     assert batch.status_code == 200
     assert batch.json[0]["result"] == {}

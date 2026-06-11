@@ -94,7 +94,7 @@ class LayoutOptions:
     page_margin: str = DEFAULT_PAGE_MARGIN_AMOUNTS[DEFAULT_UNIT]
     panel_gap: str = DEFAULT_PANEL_GAP_AMOUNTS[DEFAULT_UNIT]
     include_logo: bool = False
-    logo_sides: list[str] = field(default_factory=lambda: list(DEFAULT_SIDES))
+    logo_sides: list[str] = field(default_factory=list)
     logo_size: str = DEFAULT_LOGO_AMOUNTS[DEFAULT_UNIT]
     front_logo_size: str = DEFAULT_LOGO_AMOUNTS[DEFAULT_UNIT]
     back_logo_size: str = DEFAULT_LOGO_AMOUNTS[DEFAULT_UNIT]
@@ -141,6 +141,12 @@ def _valid_choice(value: str | None, valid_choices: frozenset[str], default: str
 def _valid_sides(raw_sides: list[str]) -> list[str]:
     sides = [side for side in DEFAULT_SIDES if side in raw_sides]
     return sides or list(DEFAULT_SIDES)
+
+
+def _selected_sides(raw_sides: list[str]) -> list[str]:
+    """Return explicitly selected valid panel sides without applying defaults."""
+
+    return [side for side in DEFAULT_SIDES if side in raw_sides]
 
 
 def _unit_amount_inches(amount: str, unit: str) -> float:
@@ -226,6 +232,9 @@ def parse_layout_options(
         50.0 if unit == "cm" else 20.0,
     )
 
+    selected_logo_sides = _selected_sides(getlist("logo_sides"))
+    include_logo = _truthy(values.get("include_logo")) or bool(selected_logo_sides)
+
     return LayoutOptions(
         sides=_valid_sides(getlist("sides")),
         page_size=_valid_choice(values.get("page_size"), VALID_PAGE_SIZES, DEFAULT_PAGE_SIZE),
@@ -236,8 +245,8 @@ def parse_layout_options(
         spacing=spacing,
         page_margin=page_margin,
         panel_gap=panel_gap,
-        include_logo=_truthy(values.get("include_logo")),
-        logo_sides=_valid_sides(getlist("logo_sides")),
+        include_logo=include_logo,
+        logo_sides=selected_logo_sides or (list(DEFAULT_SIDES) if include_logo else []),
         logo_size=logo_size,
         front_logo_size=front_logo_size,
         back_logo_size=back_logo_size,
