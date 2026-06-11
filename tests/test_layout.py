@@ -139,7 +139,7 @@ def test_border_layout_places_badges_around_panel_edges():
 
 def test_m_pixel_layout_places_badges_in_bounds_with_square_pixels():
     _, layouts = place_badges(
-        [f"badge-{index}" for index in range(13)],
+        [f"badge-{index}" for index in range(12)],
         ["front"],
         mode="m-pixels",
         badge_size_inches=1.0,
@@ -148,7 +148,7 @@ def test_m_pixel_layout_places_badges_in_bounds_with_square_pixels():
 
     layout = layouts[0]
 
-    assert len(layout.placements) == 13
+    assert len(layout.placements) == 19
     assert {placement.rotation for placement in layout.placements} == {0.0}
     for placement in layout.placements:
         assert placement.width == placement.height
@@ -172,7 +172,7 @@ def test_m_pixel_layout_repeats_selected_badges_to_fill_shape():
     assert {placement.badge_id for placement in placements} == {"alpha", "beta"}
 
 
-def test_crowded_m_pixel_layout_uses_two_or_three_lines_without_shrinking_badges():
+def test_crowded_m_pixel_layout_keeps_the_m_shape():
     _, layouts = place_badges(
         [f"badge-{index}" for index in range(14)],
         ["front"],
@@ -183,16 +183,18 @@ def test_crowded_m_pixel_layout_uses_two_or_three_lines_without_shrinking_badges
 
     placements = layouts[0].placements
     distinct_rows = {round(placement.y, 3) for placement in placements}
+    distinct_columns = {round(placement.x, 3) for placement in placements}
 
-    assert len(placements) == 14
-    assert len(distinct_rows) in {2, 3}
-    assert {placement.width for placement in placements} == {72.0}
-    assert [placement.badge_id for placement in placements] == [
+    assert len(placements) == 19
+    assert len(distinct_rows) == 7
+    assert len(distinct_columns) == 7
+    assert all(placement.width <= 72.0 for placement in placements)
+    assert [placement.badge_id for placement in placements[:14]] == [
         f"badge-{index}" for index in range(14)
     ]
 
 
-def test_m_pixel_layout_never_shrinks_below_requested_size():
+def test_m_pixel_layout_scales_dense_patterns_to_stay_in_bounds():
     _, layouts = place_badges(
         [f"badge-{index}" for index in range(25)],
         ["front", "back"],
@@ -202,11 +204,12 @@ def test_m_pixel_layout_never_shrinks_below_requested_size():
     )
 
     assert all(len(layout.placements) == 25 for layout in layouts)
-    assert all(
-        placement.width == 4.0 * 72 and placement.height == 4.0 * 72
-        for layout in layouts
-        for placement in layout.placements
-    )
+    for layout in layouts:
+        assert any(placement.width < 4.0 * 72 for placement in layout.placements)
+        for placement in layout.placements:
+            assert placement.width == placement.height
+            assert layout.x <= placement.x <= layout.x + layout.width - placement.width
+            assert layout.y <= placement.y <= layout.y + layout.height - placement.height
 
 
 def test_layout_can_use_different_badges_per_side():
