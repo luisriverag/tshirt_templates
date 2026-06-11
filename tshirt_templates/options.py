@@ -10,7 +10,18 @@ VALID_SIDES = frozenset(DEFAULT_SIDES)
 VALID_PAGE_SIZES = frozenset({"letter", "a4", "a3"})
 VALID_ORIENTATIONS = frozenset({"portrait", "landscape"})
 VALID_LAYOUT_MODES = frozenset(
-    {"grid", "rows", "diagonal", "scatter", "circle", "spiral", "wave", "border", "m-pixels"}
+    {
+        "grid",
+        "rows",
+        "diagonal",
+        "scatter",
+        "circle",
+        "spiral",
+        "wave",
+        "border",
+        "m-pixels",
+        "m-pixels-no-shrink",
+    }
 )
 VALID_ORDER_MODES = frozenset({"selected", "alphabetical", "category"})
 VALID_UNITS = frozenset({"cm", "in"})

@@ -166,6 +166,12 @@ def test_parse_layout_options_accepts_m_pixel_mode():
     assert options.mode == "m-pixels"
 
 
+def test_parse_layout_options_accepts_m_pixel_no_shrink_mode():
+    options = parse_layout_options({"mode": "m-pixels-no-shrink"}, _getlist({"sides": ["front"]}))
+
+    assert options.mode == "m-pixels-no-shrink"
+
+
 def test_parse_layout_options_accepts_new_decorative_modes():
     for mode in ["circle", "spiral", "wave"]:
         options = parse_layout_options({"mode": mode}, _getlist({"sides": ["front"]}))

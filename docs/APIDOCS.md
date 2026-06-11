@@ -114,6 +114,8 @@ Design goals:
 }
 ```
 
+`mode` accepts `grid`, `rows`, `diagonal`, `scatter`, `circle`, `spiral`, `wave`, `border`, `m-pixels`, and `m-pixels-no-shrink`. Use `m-pixels-no-shrink` when badge size must remain fixed and dense M layouts should move overflow badges around the M instead of reducing artwork size.
+
 ### Placement
 
 ```json
@@ -184,6 +186,7 @@ Response should include:
 - Page sizes.
 - Orientations.
 - Layout modes.
+- `layout_mode_details`, including labels/descriptions for each mode. The `m-pixels-no-shrink` entry documents that it preserves badge size and uses fallbacks in this order: one line above the M, lines above and below, square frame, then double-square frame.
 - Units.
 - Text fonts.
 - Curve device presets and preset diameters.
@@ -192,6 +195,30 @@ Response should include:
 - Copy range.
 - Order modes.
 - Default option object, including `front_text`, `back_text`, and `text_font`.
+
+Example layout-mode metadata excerpt:
+
+```json
+{
+  "layout_modes": {
+    "m-pixels": "M pixel shape",
+    "m-pixels-no-shrink": "M pixel shape (no shrink)"
+  },
+  "layout_mode_details": {
+    "m-pixels-no-shrink": {
+      "label": "M pixel shape (no shrink)",
+      "description": "Badges fill a fixed-size pixel-art capital M without reducing badge size; overflow falls back to one line above, lines above and below, a square frame, then a double-square frame.",
+      "fallbacks": [
+        "line-above",
+        "lines-above-and-below",
+        "square-frame",
+        "double-square-frame"
+      ],
+      "shrinks_badges": false
+    }
+  }
+}
+```
 
 ### `GET /api/v1/badges`
 
@@ -470,7 +497,7 @@ Use consistent JSON errors:
     "code": "invalid_option",
     "message": "Unsupported layout mode.",
     "field": "mode",
-    "allowed_values": ["grid", "rows"]
+    "allowed_values": ["grid", "rows", "diagonal", "scatter", "circle", "spiral", "wave", "border", "m-pixels", "m-pixels-no-shrink"]
   }
 }
 ```
@@ -554,7 +581,7 @@ Outputs a badge list. Preferred `logo_sides` values of `front` and/or `back` app
 
 Inputs: `{}`
 
-Outputs the same supported options/defaults payload as `/api/v1/options`, plus a text content item for clients that display tool-call summaries.
+Outputs the same supported options/defaults payload as `/api/v1/options`, plus a text content item for clients that display tool-call summaries. The payload includes `layout_mode_details`, so MCP clients can discover the `m-pixels-no-shrink` mode and its M-overflow fallback order without scraping browser labels.
 
 #### `compute_layout`
 
@@ -568,7 +595,7 @@ Inputs:
 }
 ```
 
-Outputs page dimensions, normalized options, panel layouts, and placements in `structuredContent`, plus a text content item.
+Outputs page dimensions, normalized options, panel layouts, and placements in `structuredContent`, plus a text content item. The tool schema enumerates the same `options.mode` values as `/api/v1/options`, including `m-pixels-no-shrink` for a fixed badge-size M with overflow fallback frames.
 
 #### `render_pdf`
 
@@ -582,6 +609,8 @@ Inputs:
   "allow_partial": false
 }
 ```
+
+The tool schema enumerates the same `options.mode` values as `/api/v1/options`, including `m-pixels-no-shrink` for a fixed badge-size M with overflow fallback frames.
 
 Before rendering, MCP checks that every requested badge ID resolved to a renderable placement and every resolved badge asset can be fetched and parsed. By default it returns `render_preflight_failed` for unknown badges or empty layouts and `asset_verification_failed` for broken assets instead of delivering a partial PDF; set `allow_partial` to `true` to receive a PDF with `warnings` and `diagnostics` describing omitted IDs, failed assets drawn as placeholders, layout counts, and placement counts. Generated PDFs omit automatic panel headers and page numbers; only user-supplied panel text is drawn as text.
 

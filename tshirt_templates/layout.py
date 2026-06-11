@@ -450,6 +450,123 @@ def _m_pixel_badge_ids(ids: list[str], slots: int) -> list[str]:
     return [ids[index % len(ids)] for index in range(slots)]
 
 
+def _m_no_shrink_fallback_slots(count: int) -> list[tuple[int, int]]:
+    """Return fixed-size M slots plus overflow slots that do not shrink badges."""
+
+    base_cols = base_rows = MIN_M_PIXEL_GRID_SIZE
+    slots = _m_pixel_slots(base_cols, base_rows)
+    if count <= len(slots):
+        return slots
+
+    fallback_slots: list[tuple[int, int]] = []
+    fallback_slots.extend((-1, col) for col in range(base_cols))
+    if count <= len(slots) + len(fallback_slots):
+        return slots + fallback_slots
+
+    fallback_slots.extend((base_rows, col) for col in range(base_cols))
+    if count <= len(slots) + len(fallback_slots):
+        return slots + fallback_slots
+
+    inner_frame_slots = [
+        (row, col)
+        for row in range(-1, base_rows + 1)
+        for col in range(-1, base_cols + 1)
+        if row in {-1, base_rows} or col in {-1, base_cols}
+    ]
+    fallback_slots = inner_frame_slots
+    if count <= len(slots) + len(fallback_slots):
+        return slots + fallback_slots
+
+    outer_frame_slots = [
+        (row, col)
+        for row in range(-2, base_rows + 2)
+        for col in range(-2, base_cols + 2)
+        if row in {-2, base_rows + 1} or col in {-2, base_cols + 1}
+    ]
+    fallback_slots += outer_frame_slots
+    ring = 3
+    while len(slots) + len(fallback_slots) < count:
+        fallback_slots.extend(
+            (row, col)
+            for row in range(-ring, base_rows + ring)
+            for col in range(-ring, base_cols + ring)
+            if row in {-ring, base_rows + ring - 1} or col in {-ring, base_cols + ring - 1}
+        )
+        ring += 1
+    return slots + fallback_slots
+
+
+def _m_pixel_no_shrink_badge_ids(ids: list[str], slots: int) -> list[str]:
+    """Fill a fixed-size M, then place overflow badges once in fallback slots."""
+
+    if not ids:
+        return []
+    if len(ids) <= slots:
+        return _m_pixel_badge_ids(ids, slots)
+    return ids[:slots]
+
+
+def _scaled_spacing_for_slot_coordinates(
+    slot_coordinates: list[tuple[int, int]],
+    panel: tuple[float, float, float, float],
+    badge_size: float,
+    spacing: float,
+) -> float:
+    """Shrink only spacing, never badges, so fixed slot coordinates fit when possible."""
+
+    if not slot_coordinates or spacing <= 0:
+        return spacing
+    _, _, width, height = panel
+    rows = [row for row, _ in slot_coordinates]
+    cols = [col for _, col in slot_coordinates]
+    grid_cols = max(cols) - min(cols) + 1
+    grid_rows = max(rows) - min(rows) + 1
+    max_horizontal_spacing = (width - grid_cols * badge_size) / max(1, grid_cols - 1)
+    max_vertical_spacing = (height - grid_rows * badge_size) / max(1, grid_rows - 1)
+    if max_horizontal_spacing < 0 or max_vertical_spacing < 0:
+        return 0.0
+    return min(spacing, max_horizontal_spacing, max_vertical_spacing)
+
+
+def _slot_coordinate_positions(
+    ids: list[str],
+    slot_coordinates: list[tuple[int, int]],
+    panel: tuple[float, float, float, float],
+    badge_size: float,
+    spacing: float,
+) -> list[Placement]:
+    """Place badge ids into arbitrary integer grid coordinates centered in a panel."""
+
+    x, y, width, height = panel
+    if not ids or not slot_coordinates:
+        return []
+
+    rows = [row for row, _ in slot_coordinates]
+    cols = [col for _, col in slot_coordinates]
+    min_row = min(rows)
+    min_col = min(cols)
+    grid_cols = max(cols) - min_col + 1
+    grid_rows = max(rows) - min_row + 1
+    step = badge_size + spacing
+    total_width = grid_cols * badge_size + max(0, grid_cols - 1) * spacing
+    total_height = grid_rows * badge_size + max(0, grid_rows - 1) * spacing
+    start_x = x + (width - total_width) / 2
+    top_y = y + height - (height - total_height) / 2 - badge_size
+
+    placements: list[Placement] = []
+    for badge_id, (row, col) in zip(ids, slot_coordinates):
+        placements.append(
+            Placement(
+                badge_id=badge_id,
+                x=start_x + (col - min_col) * step,
+                y=top_y - (row - min_row) * step,
+                width=badge_size,
+                height=badge_size,
+            )
+        )
+    return placements
+
+
 
 def _m_pixel_minimum_slots(selected_badge_count: int) -> int:
     """Return the minimum number of M pixels to draw for a selection size."""
@@ -517,6 +634,28 @@ def _m_pixel_positions(
     return placements
 
 
+def _m_pixel_no_shrink_positions(
+    ids: list[str],
+    panel: tuple[float, float, float, float],
+    badge_size: float,
+    spacing: float,
+) -> list[Placement]:
+    """Draw a fixed-size M and move overflow badges around it instead of shrinking."""
+
+    if not ids:
+        return []
+
+    slots = _m_no_shrink_fallback_slots(len(ids))
+    base_m_slots = len(_m_pixel_slots(MIN_M_PIXEL_GRID_SIZE, MIN_M_PIXEL_GRID_SIZE))
+    placement_count = min(len(slots), max(len(ids), base_m_slots))
+    selected_slots = slots[:placement_count]
+    placement_ids = _m_pixel_no_shrink_badge_ids(ids, placement_count)
+    pixel_spacing = _scaled_spacing_for_slot_coordinates(
+        selected_slots, panel, badge_size, spacing
+    )
+    return _slot_coordinate_positions(placement_ids, selected_slots, panel, badge_size, pixel_spacing)
+
+
 def place_badges(
     badge_ids: list[str] | Mapping[str, list[str]],
     sides: list[str],
@@ -560,6 +699,7 @@ def place_badges(
         "wave": _wave_positions,
         "border": _border_positions,
         "m-pixels": _m_pixel_positions,
+        "m-pixels-no-shrink": _m_pixel_no_shrink_positions,
     }
     placer = placers.get(mode, _grid_positions)
 

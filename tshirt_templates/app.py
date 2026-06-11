@@ -50,6 +50,63 @@ LAYOUT_MODES = {
     "wave": "Wave ribbon",
     "border": "Border frame",
     "m-pixels": "M pixel shape",
+    "m-pixels-no-shrink": "M pixel shape (no shrink)",
+}
+LAYOUT_MODE_DETAILS = {
+    "grid": {
+        "label": LAYOUT_MODES["grid"],
+        "description": "Centered rows and columns with automatic spacing reduction for dense selections.",
+    },
+    "rows": {
+        "label": LAYOUT_MODES["rows"],
+        "description": "Staggered rows with alternating offsets and automatic spacing reduction.",
+    },
+    "diagonal": {
+        "label": LAYOUT_MODES["diagonal"],
+        "description": "Badges placed along a diagonal sash.",
+    },
+    "scatter": {
+        "label": LAYOUT_MODES["scatter"],
+        "description": "Deterministic pseudo-random positions and rotations.",
+    },
+    "circle": {
+        "label": LAYOUT_MODES["circle"],
+        "description": "Badges arranged around an oval wreath.",
+    },
+    "spiral": {
+        "label": LAYOUT_MODES["spiral"],
+        "description": "Badges trail outward from the panel center.",
+    },
+    "wave": {
+        "label": LAYOUT_MODES["wave"],
+        "description": "Badges follow a horizontal sine-wave ribbon.",
+    },
+    "border": {
+        "label": LAYOUT_MODES["border"],
+        "description": "Badges wrap around the panel edges.",
+    },
+    "m-pixels": {
+        "label": LAYOUT_MODES["m-pixels"],
+        "description": (
+            "Badges fill a pixel-art capital M, expanding to denser M grids and scaling down "
+            "only as needed to stay inside the panel."
+        ),
+    },
+    "m-pixels-no-shrink": {
+        "label": LAYOUT_MODES["m-pixels-no-shrink"],
+        "description": (
+            "Badges fill a fixed-size pixel-art capital M without reducing badge size; overflow "
+            "falls back to one line above, lines above and below, a square frame, then a "
+            "double-square frame."
+        ),
+        "fallbacks": [
+            "line-above",
+            "lines-above-and-below",
+            "square-frame",
+            "double-square-frame",
+        ],
+        "shrinks_badges": False,
+    },
 }
 PAGE_SIZES = {
     "a4": "A4",
@@ -257,6 +314,7 @@ def options_payload() -> dict:
         "page_sizes": PAGE_SIZES,
         "orientations": ORIENTATIONS,
         "layout_modes": LAYOUT_MODES,
+        "layout_mode_details": LAYOUT_MODE_DETAILS,
         "order_modes": ORDER_MODES,
         "units": UNITS,
         "text_fonts": TEXT_FONTS,
@@ -1295,6 +1353,19 @@ def create_app() -> Flask:
         }
 
     def _mcp_tools() -> list[dict]:
+        layout_options_schema = {
+            "type": "object",
+            "properties": {
+                "mode": {
+                    "type": "string",
+                    "enum": list(LAYOUT_MODES.keys()),
+                    "description": (
+                        "Placement mode. Use m-pixels-no-shrink to preserve badge size "
+                        "and place overflow around the M."
+                    ),
+                }
+            },
+        }
         return [
             {
                 "name": "get_options",
@@ -1310,9 +1381,15 @@ def create_app() -> Flask:
                         "refresh": {"type": "boolean"},
                         "order": {"type": "string"},
                         "logo_sides": {
-                            "description": "Preferred: include the MakeSpace logo when one or more panel sides are selected.",
+                            "description": (
+                                "Preferred: include the MakeSpace logo when one or more "
+                                "panel sides are selected."
+                            ),
                             "oneOf": [
-                                {"type": "array", "items": {"type": "string", "enum": ["front", "back"]}},
+                                {
+                                    "type": "array",
+                                    "items": {"type": "string", "enum": ["front", "back"]},
+                                },
                                 {"type": "string"},
                             ],
                         },
@@ -1330,7 +1407,7 @@ def create_app() -> Flask:
                     "type": "object",
                     "properties": {
                         "badge_ids": {"type": "array", "items": {"type": "string"}},
-                        "options": {"type": "object"},
+                        "options": layout_options_schema,
                     },
                 },
             },
@@ -1341,7 +1418,7 @@ def create_app() -> Flask:
                     "type": "object",
                     "properties": {
                         "badge_ids": {"type": "array", "items": {"type": "string"}},
-                        "options": {"type": "object"},
+                        "options": layout_options_schema,
                         "manual_placements": {"type": "array", "items": {"type": "object"}},
                         "allow_partial": {"type": "boolean"},
                     },
@@ -1366,7 +1443,7 @@ def create_app() -> Flask:
                     "type": "object",
                     "properties": {
                         "badge_ids": {"type": "array", "items": {"type": "string"}},
-                        "options": {"type": "object"},
+                        "options": layout_options_schema,
                         "manual_placements": {"type": "array", "items": {"type": "object"}},
                     },
                 },

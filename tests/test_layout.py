@@ -212,6 +212,47 @@ def test_m_pixel_layout_scales_dense_patterns_to_stay_in_bounds():
             assert layout.y <= placement.y <= layout.y + layout.height - placement.height
 
 
+def test_m_pixel_no_shrink_layout_uses_line_above_for_overflow():
+    _, layouts = place_badges(
+        [f"badge-{index}" for index in range(14)],
+        ["front"],
+        mode="m-pixels-no-shrink",
+        badge_size_inches=1.0,
+        spacing_inches=0.1,
+    )
+
+    placements = layouts[0].placements
+    row_positions = sorted({round(placement.y, 3) for placement in placements})
+
+    assert len(placements) == 14
+    assert len(row_positions) == 6
+    assert {placement.width for placement in placements} == {72.0}
+    assert [placement.badge_id for placement in placements] == [
+        f"badge-{index}" for index in range(14)
+    ]
+
+
+def test_m_pixel_no_shrink_layout_expands_to_square_fallbacks_without_shrinking():
+    cases = [(23, 5, 7), (37, 7, 7), (69, 9, 9)]
+
+    for count, expected_columns, expected_rows in cases:
+        _, layouts = place_badges(
+            [f"badge-{index}" for index in range(count)],
+            ["front"],
+            mode="m-pixels-no-shrink",
+            badge_size_inches=0.6,
+            spacing_inches=0.1,
+        )
+        placements = layouts[0].placements
+        columns = {round(placement.x, 3) for placement in placements}
+        rows = {round(placement.y, 3) for placement in placements}
+
+        assert len(placements) == count
+        assert len(columns) == expected_columns
+        assert len(rows) == expected_rows
+        assert {placement.width for placement in placements} == {0.6 * 72}
+
+
 def test_layout_can_use_different_badges_per_side():
     _, layouts = place_badges(
         {"front": ["front-only"], "back": ["back-only", "shared"]},
