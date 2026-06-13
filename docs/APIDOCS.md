@@ -105,6 +105,7 @@ Design goals:
   "mirror": true,
   "include_print_marks": false,
   "include_cut_lines": false,
+  "include_yellow_unifier": false,
   "include_curve_effect": false,
   "curve_device": "custom",
   "curve_diameter": "8.0",
@@ -336,6 +337,7 @@ Request:
     "mirror": true,
     "include_print_marks": false,
     "include_cut_lines": false,
+    "include_yellow_unifier": false,
     "front_text": "Ada",
     "back_text": "MakeSpace Madrid",
     "text_font": "ubuntu"
@@ -344,7 +346,7 @@ Request:
 }
 ```
 
-`page_margin` controls the outer content inset, and `panel_gap` controls the space between front/back panels when both are selected. Both use the selected `unit`. `logo_sides` controls MakeSpace logo placement: use `["front"]`, `["back"]`, or `["front", "back"]` to include the logo on those panels; omit it or send an empty array for no logo. The legacy `include_logo: true` option is still accepted and defaults to both logo sides when `logo_sides` is absent. `front_text` and `back_text` are optional short labels rendered on the matching panel. `text_font` accepts the values returned by `/api/v1/options` and defaults to `ubuntu`. `include_curve_effect` adds a cylindrical mug/canteen adapter effect in generated PDFs. `curve_device` may be `custom`, `mug`, `skinny-tumbler`, or `canteen`; `/api/v1/options` returns both `curve_device_options` labels and `curve_device_diameters` preset values. Presets provide a starting diameter, and `curve_diameter` may override it with the exact outside device/heater-adapter diameter in the selected `unit`.
+`page_margin` controls the outer content inset, and `panel_gap` controls the space between front/back panels when both are selected. Both use the selected `unit`. `logo_sides` controls MakeSpace logo placement: use `["front"]`, `["back"]`, or `["front", "back"]` to include the logo on those panels; omit it or send an empty array for no logo. The legacy `include_logo: true` option is still accepted and defaults to both logo sides when `logo_sides` is absent. `front_text` and `back_text` are optional short labels rendered on the matching panel. `text_font` accepts the values returned by `/api/v1/options` and defaults to `ubuntu`. `include_yellow_unifier` draws a translucent warm yellow layer over each badge placement in both preview and generated PDFs so badges with different yellow artwork print more consistently. `include_curve_effect` adds a cylindrical mug/canteen adapter effect in generated PDFs. `curve_device` may be `custom`, `mug`, `skinny-tumbler`, or `canteen`; `/api/v1/options` returns both `curve_device_options` labels and `curve_device_diameters` preset values. Presets provide a starting diameter, and `curve_diameter` may override it with the exact outside device/heater-adapter diameter in the selected `unit`.
 
 Manual placements are optional. Items are addressed by `layout_index` and `placement_index`, with `x`/`y` supplied in the selected unit from the preview top-left coordinate space.
 
@@ -364,7 +366,7 @@ Response:
 
 ### `POST /api/v1/pdfs`
 
-Generates a PDF from the same JSON layout request shape used by `/api/v1/layouts/preview`. The endpoint applies badge ordering, copies, optional logo placement, optional panel text, manual placement overrides, mirror settings, and optional cylindrical curve compensation for mug/canteen heater adapters. Generated template PDFs do not include automatic panel headers or page numbers. Before rendering, the server verifies that every resolved badge asset can be fetched and parsed by the PDF renderer; by default failures return `422 asset_verification_failed` with per-badge details. Set top-level `allow_partial` to `true` to still receive an `application/pdf` response with failed assets drawn as placeholders and the failure details in the `X-Badgeware-Warnings` response header. Browser form PDF downloads always use this partial-render behavior so one broken remote asset does not block the whole PDF.
+Generates a PDF from the same JSON layout request shape used by `/api/v1/layouts/preview`. The endpoint applies badge ordering, copies, optional logo placement, optional panel text, manual placement overrides, mirror settings, optional yellow unifier overlays, and optional cylindrical curve compensation for mug/canteen heater adapters. Generated template PDFs do not include automatic panel headers or page numbers. Before rendering, the server verifies that every resolved badge asset can be fetched and parsed by the PDF renderer; by default failures return `422 asset_verification_failed` with per-badge details. Set top-level `allow_partial` to `true` to still receive an `application/pdf` response with failed assets drawn as placeholders and the failure details in the `X-Badgeware-Warnings` response header. Browser form PDF downloads always use this partial-render behavior so one broken remote asset does not block the whole PDF.
 
 Request:
 
@@ -390,6 +392,7 @@ Request:
     "mirror": true,
     "include_print_marks": false,
     "include_cut_lines": false,
+    "include_yellow_unifier": false,
     "front_text": "Ada",
     "back_text": "MakeSpace Madrid",
     "text_font": "ubuntu"
@@ -413,7 +416,7 @@ Job-based generation remains a future option if templates become multi-page or a
 
 ### `GET /api/v1/templates`
 
-Lists saved local JSON template files from the configured template folder. Each summary includes the template `name`, timestamps, `badge_count`, and normalized `options` snapshot.
+Lists saved local JSON template files from the configured template folder. The browser UI exposes these templates in the **Saved design templates** panel so users can save the current badge assignments/options and load them later. Each summary includes the template `name`, timestamps, `badge_count`, and normalized `options` snapshot.
 
 Response:
 
@@ -433,7 +436,7 @@ Response:
 
 ### `POST /api/v1/templates`
 
-Saves or replaces a named local JSON template file for repeatable local workflows. Template names are storage-safe names with letters, numbers, dots, dashes, or underscores. The saved `template` uses the same request shape as `/api/v1/layouts/preview` and `/api/v1/pdfs`: `badge_ids`, `options`, and optional `manual_placements`.
+Saves or replaces a named local JSON template file for repeatable local workflows. Template names are storage-safe names with letters, numbers, dots, dashes, or underscores. The saved `template` uses the same request shape as `/api/v1/layouts/preview` and `/api/v1/pdfs`: `badge_ids`, `options`, and optional `manual_placements`. Browser-saved designs may also include `side_badge_ids` with separate `front` and `back` arrays so front-only/back-only badge assignments can be restored in the UI.
 
 Request:
 
@@ -442,6 +445,10 @@ Request:
   "name": "team-shirt",
   "template": {
     "badge_ids": ["electronics/example.svg"],
+    "side_badge_ids": {
+      "front": ["electronics/example.svg"],
+      "back": []
+    },
     "options": {"sides": ["front"], "mode": "grid"},
     "manual_placements": []
   }
@@ -457,6 +464,10 @@ Response (`201 Created`):
   "updated_at": "2026-06-07T00:00:00Z",
   "template": {
     "badge_ids": ["electronics/example.svg"],
+    "side_badge_ids": {
+      "front": ["electronics/example.svg"],
+      "back": []
+    },
     "options": {"sides": ["front"], "mode": "grid"},
     "manual_placements": []
   }

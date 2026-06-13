@@ -68,6 +68,7 @@
                     <title>{{ badge.name }}</title>
                     <g class="badge-transform" transform="translate({{ placement.x + placement.width / 2 }} {{ page_height - placement.y - placement.height / 2 }}) rotate({{ -placement.rotation }})">
                       <image href="{{ badge.raw_url }}" x="{{ -placement.width / 2 }}" y="{{ -placement.height / 2 }}" width="{{ placement.width }}" height="{{ placement.height }}" preserveAspectRatio="xMidYMid meet"/>
+                      {% if form.get('include_yellow_unifier') == 'on' %}<rect class="yellow-unifier-layer" x="{{ -placement.width / 2 }}" y="{{ -placement.height / 2 }}" width="{{ placement.width }}" height="{{ placement.height }}" rx="{{ [placement.width, placement.height]|min * 0.18 }}"/>{% endif %}
                       {% if form.get('include_cut_lines') == 'on' %}<rect class="cut-line-outline" x="{{ -placement.width / 2 }}" y="{{ -placement.height / 2 }}" width="{{ placement.width }}" height="{{ placement.height }}" rx="6"/>{% endif %}
                       <rect class="badge-contrast-outline" x="{{ -placement.width / 2 }}" y="{{ -placement.height / 2 }}" width="{{ placement.width }}" height="{{ placement.height }}" rx="6"/>
                       <rect class="selection-outline" x="{{ -placement.width / 2 - 5 }}" y="{{ -placement.height / 2 - 5 }}" width="{{ placement.width + 10 }}" height="{{ placement.height + 10 }}" rx="9"/>
@@ -194,7 +195,7 @@
           </div>
         </section>
 
-        {% for key in ['page_size', 'orientation', 'mode', 'order', 'unit', 'badge_size', 'spacing', 'page_margin', 'panel_gap', 'logo_size', 'front_logo_size', 'back_logo_size', 'copies', 'mirror', 'include_print_marks', 'include_cut_lines', 'include_curve_effect', 'curve_device', 'curve_diameter', 'front_text', 'back_text', 'text_font', 'text_size'] %}
+        {% for key in ['page_size', 'orientation', 'mode', 'order', 'unit', 'badge_size', 'spacing', 'page_margin', 'panel_gap', 'logo_size', 'front_logo_size', 'back_logo_size', 'copies', 'mirror', 'include_print_marks', 'include_cut_lines', 'include_yellow_unifier', 'include_curve_effect', 'curve_device', 'curve_diameter', 'front_text', 'back_text', 'text_font', 'text_size'] %}
           {% if form.get(key) %}<input type="hidden" name="{{ key }}" value="{{ form.get(key) }}">{% endif %}
         {% endfor %}
         {% for side in form.getlist('sides') %}<input type="hidden" name="sides" value="{{ side }}">{% endfor %}

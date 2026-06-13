@@ -28,12 +28,14 @@ def test_render_pdf_can_include_print_marks_and_metadata():
         [layout],
         print_marks=True,
         cut_lines=True,
-        metadata={"include_cut_lines": "true", "include_print_marks": "true", "mode": "grid"},
+        yellow_unifier=True,
+        metadata={"include_cut_lines": "true", "include_print_marks": "true", "include_yellow_unifier": "true", "mode": "grid"},
     )
 
     assert content.startswith(b"%PDF")
     assert b"include_print_marks=true" in content
     assert b"include_cut_lines=true" in content
+    assert b"include_yellow_unifier=true" in content
     assert b"mode=grid" in content
     assert b"/Subject" in content
 
@@ -154,6 +156,32 @@ def test_render_pdf_uses_configured_panel_text_size(monkeypatch):
 
     assert content.startswith(b"%PDF")
     assert 36.0 in font_sizes
+
+def test_render_pdf_draws_yellow_unifier_after_badge(monkeypatch):
+    badge = Badge(
+        id="demo-badge.svg",
+        name="Demo Badge",
+        path="demo-badge.svg",
+        raw_url="/static/demo-badge.svg",
+        extension=".svg",
+    )
+    layout = PanelLayout(
+        "front",
+        20.0,
+        20.0,
+        160.0,
+        160.0,
+        [Placement(badge.id, 40.0, 45.0, 30.0, 30.0)],
+    )
+    events = []
+    monkeypatch.setattr(pdf_module, "_draw_badge", lambda *args: events.append("badge"))
+    monkeypatch.setattr(pdf_module, "_draw_yellow_unifier_layer", lambda *args: events.append("yellow"))
+
+    content = render_pdf([badge], (200.0, 300.0), [layout], mirror=False, yellow_unifier=True)
+
+    assert content.startswith(b"%PDF")
+    assert events == ["badge", "yellow"]
+
 
 def test_render_pdf_fetches_each_badge_asset_once_for_repeated_placements(monkeypatch):
     badge = Badge(

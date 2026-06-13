@@ -38,6 +38,16 @@ def test_index_renders_badge_picker(monkeypatch):
     assert b'class="brand-mark"' in response.data
     assert b'href="https://makespacemadrid.org/assets/images/favicon.png"' in response.data
     assert b"Template workflow" in response.data
+    assert b"Saved design templates" in response.data
+    assert b"Save current design" in response.data
+    assert b"Load selected design" in response.data
+    assert b"Delete selected design" in response.data
+    assert b"currentDesignTemplate" in response.data
+    assert b"saveCurrentDesignTemplate" in response.data
+    assert b"loadSelectedDesignTemplate" in response.data
+    assert b"deleteSelectedDesignTemplate" in response.data
+    assert b"side_badge_ids" in response.data
+    assert b"/api/v1/templates" in response.data
     assert b"1. Page and layout" in response.data
     assert b"2. Badge size and labels" in response.data
     assert b"3. PDF output" in response.data
@@ -105,6 +115,8 @@ def test_index_renders_badge_picker(monkeypatch):
     assert b'name="include_print_marks" value="off"' in response.data
     assert b"Add badge cut-line outlines" in response.data
     assert b'name="include_cut_lines" value="off"' in response.data
+    assert b"Add yellow unifier layer" in response.data
+    assert b'name="include_yellow_unifier" value="off"' in response.data
     assert b"Optional: mug/canteen curved adapter effect" in response.data
     assert b"Adapter math" in response.data
     assert b"Curve diameter" in response.data
@@ -338,6 +350,8 @@ def test_pdf_route_returns_mirrored_pdf_download_by_default(monkeypatch):
     assert calls[0]["cut_lines"] is False
     assert calls[0]["metadata"]["include_print_marks"] == "false"
     assert calls[0]["metadata"]["include_cut_lines"] == "false"
+    assert calls[0]["metadata"]["include_yellow_unifier"] == "false"
+    assert calls[0]["yellow_unifier"] is False
 
 
 def test_pdf_route_passes_panel_text_options(monkeypatch):
@@ -569,6 +583,7 @@ def test_api_health_options_and_badges(monkeypatch):
     assert options.json["defaults"]["page_margin"] == "1.25"
     assert options.json["defaults"]["panel_gap"] == "0.85"
     assert options.json["defaults"]["logo_sides"] == []
+    assert options.json["defaults"]["include_yellow_unifier"] is False
     assert options.json["layout_modes"]["m-pixels-no-shrink"] == "M pixel shape (no shrink)"
     assert options.json["layout_mode_details"]["m-pixels-no-shrink"]["shrinks_badges"] is False
     assert options.json["layout_mode_details"]["m-pixels-no-shrink"]["fallbacks"] == [
@@ -718,6 +733,7 @@ def test_api_layout_preview_computes_json_layout_with_logo(monkeypatch):
                 "back_text": "MakeSpace",
                 "text_font": "times",
                 "text_size": "32",
+                "include_yellow_unifier": True,
                 "include_curve_effect": True,
                 "curve_device": "mug",
                 "curve_diameter": "3.25",
@@ -737,6 +753,7 @@ def test_api_layout_preview_computes_json_layout_with_logo(monkeypatch):
     assert response.json["options"]["back_text"] == "MakeSpace"
     assert response.json["options"]["text_font"] == "times"
     assert response.json["options"]["text_size"] == "32"
+    assert response.json["options"]["include_yellow_unifier"] is True
     assert response.json["options"]["include_curve_effect"] is True
     assert response.json["options"]["curve_device"] == "mug"
     assert response.json["options"]["curve_diameter"] == "3.25"
@@ -838,6 +855,7 @@ def test_api_pdf_generates_pdf_from_json(monkeypatch):
                 "mirror": False,
                 "include_print_marks": True,
                 "include_cut_lines": True,
+                "include_yellow_unifier": True,
                 "include_curve_effect": True,
                 "curve_device": "mug",
                 "curve_diameter": "3.25",
@@ -862,6 +880,8 @@ def test_api_pdf_generates_pdf_from_json(monkeypatch):
     assert kwargs["cut_lines"] is True
     assert kwargs["metadata"]["include_print_marks"] == "true"
     assert kwargs["metadata"]["include_cut_lines"] == "true"
+    assert kwargs["metadata"]["include_yellow_unifier"] == "true"
+    assert kwargs["yellow_unifier"] is True
     assert kwargs["metadata"]["include_curve_effect"] == "true"
     assert kwargs["metadata"]["curve_device"] == "mug"
     assert kwargs["metadata"]["curve_diameter"] == "3.25"
@@ -1087,6 +1107,7 @@ def test_mcp_metadata_resources_prompts_and_tools(monkeypatch):
     assert json.loads(options_resource["text"])["defaults"]["page_margin"] == "1.25"
     options_payload = json.loads(options_resource["text"])
     assert options_payload["defaults"]["logo_sides"] == []
+    assert options_payload["defaults"]["include_yellow_unifier"] is False
     assert options_payload["layout_modes"]["m-pixels-no-shrink"] == "M pixel shape (no shrink)"
     assert options_payload["layout_mode_details"]["m-pixels-no-shrink"]["fallbacks"] == [
         "line-above",
@@ -1460,6 +1481,7 @@ def test_api_saved_templates_round_trip(tmp_path):
     client = app.test_client()
     template = {
         "badge_ids": [DEMO_BADGE.id],
+        "side_badge_ids": {"front": [DEMO_BADGE.id], "back": []},
         "options": {"sides": ["front"], "mode": "grid", "front_text": "Ada"},
         "manual_placements": [{"layout_index": 0, "placement_index": 0, "x": 1.5}],
     }
@@ -1479,6 +1501,7 @@ def test_api_saved_templates_round_trip(tmp_path):
     assert listed.json["templates"][0]["badge_count"] == 1
     assert fetched.status_code == 200
     assert fetched.json["template"]["options"]["front_text"] == "Ada"
+    assert fetched.json["template"]["side_badge_ids"] == {"front": [DEMO_BADGE.id], "back": []}
     assert rejected_name.status_code == 400
     assert rejected_name.json["error"]["code"] == "invalid_template_name"
 
@@ -1496,6 +1519,7 @@ def test_mcp_saved_template_tools_and_resources(tmp_path):
     client = app.test_client()
     template = {
         "badge_ids": [DEMO_BADGE.id],
+        "side_badge_ids": {"front": [DEMO_BADGE.id], "back": []},
         "options": {"sides": ["front"], "mode": "grid"},
         "manual_placements": [],
     }
