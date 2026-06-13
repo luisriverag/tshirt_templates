@@ -121,6 +121,7 @@ class LayoutOptions:
     mirror: bool = True
     include_print_marks: bool = False
     include_cut_lines: bool = False
+    include_yellow_unifier: bool = False
     front_text: str = ""
     back_text: str = ""
     text_font: str = "ubuntu"
@@ -273,6 +274,7 @@ def parse_layout_options(
         mirror=_truthy(values.get("mirror"), default=True),
         include_print_marks=_truthy(values.get("include_print_marks")),
         include_cut_lines=_truthy(values.get("include_cut_lines")),
+        include_yellow_unifier=_truthy(values.get("include_yellow_unifier")),
         front_text=_safe_panel_text(values.get("front_text")),
         back_text=_safe_panel_text(values.get("back_text")),
         text_font=_valid_choice(values.get("text_font"), VALID_TEXT_FONTS, "ubuntu"),

@@ -354,6 +354,7 @@ def options_payload() -> dict:
             "mirror": True,
             "include_print_marks": False,
             "include_cut_lines": False,
+            "include_yellow_unifier": False,
             "include_curve_effect": False,
             "curve_device": DEFAULT_CURVE_DEVICE,
             "curve_diameter": DEFAULT_CURVE_DIAMETER_AMOUNTS[DEFAULT_UNIT],
@@ -550,6 +551,7 @@ def create_app() -> Flask:
             text_fonts=TEXT_FONTS,
             default_text_size=DEFAULT_TEXT_SIZE,
             upload_messages=get_flashed_messages(),
+            saved_templates=_list_saved_templates(),
         )
 
     @app.post("/refresh")
@@ -819,6 +821,7 @@ def create_app() -> Flask:
             panel_text=_panel_text_options(options, page_size[1]),
             print_marks=options.include_print_marks,
             cut_lines=options.include_cut_lines,
+            yellow_unifier=options.include_yellow_unifier,
             curve_settings=_curve_settings(options),
             metadata=metadata,
             one_layout_per_page=True,
@@ -959,6 +962,7 @@ def create_app() -> Flask:
             panel_text=_panel_text_options(options, page_size[1]),
             print_marks=options.include_print_marks,
             cut_lines=options.include_cut_lines,
+            yellow_unifier=options.include_yellow_unifier,
             curve_settings=_curve_settings(options),
             metadata=metadata,
             one_layout_per_page=True,
@@ -1103,6 +1107,7 @@ def create_app() -> Flask:
             "back_logo_size": options.back_logo_size,
             "include_print_marks": str(options.include_print_marks).lower(),
             "include_cut_lines": str(options.include_cut_lines).lower(),
+            "include_yellow_unifier": str(options.include_yellow_unifier).lower(),
             "include_curve_effect": str(options.include_curve_effect).lower(),
             "curve_device": options.curve_device,
             "curve_diameter": options.curve_diameter,
@@ -1266,11 +1271,19 @@ def create_app() -> Flask:
         template = payload.get("template", {})
         if not isinstance(template, dict):
             template = {}
+        badge_ids = template.get("badge_ids", []) if isinstance(template.get("badge_ids"), list) else []
+        side_badge_ids = template.get("side_badge_ids", {}) if isinstance(template.get("side_badge_ids"), dict) else {}
+        side_ids = [
+            badge_id
+            for side in ("front", "back")
+            for badge_id in side_badge_ids.get(side, [])
+            if isinstance(side_badge_ids.get(side, []), list)
+        ]
         return {
             "name": payload.get("name", path.stem),
             "created_at": payload.get("created_at"),
             "updated_at": payload.get("updated_at"),
-            "badge_count": len(template.get("badge_ids", [])) if isinstance(template.get("badge_ids"), list) else 0,
+            "badge_count": len(_unique_badge_ids([*badge_ids, *side_ids])),
             "options": template.get("options", {}) if isinstance(template.get("options"), dict) else {},
         }
 
@@ -1303,15 +1316,23 @@ def create_app() -> Flask:
         badge_ids = template.get("badge_ids", [])
         options = template.get("options", {})
         manual_placements = template.get("manual_placements", [])
+        side_badge_ids = template.get("side_badge_ids", {})
         if not isinstance(badge_ids, list) or not isinstance(options, dict):
             return None
         if not isinstance(manual_placements, list):
             manual_placements = []
-        return {
+        normalized = {
             "badge_ids": [str(badge_id) for badge_id in badge_ids],
             "options": options,
             "manual_placements": [item for item in manual_placements if isinstance(item, dict)],
         }
+        if isinstance(side_badge_ids, dict) and "side_badge_ids" in template:
+            normalized["side_badge_ids"] = {
+                side: [str(badge_id) for badge_id in side_badge_ids.get(side, [])]
+                for side in ("front", "back")
+                if isinstance(side_badge_ids.get(side, []), list)
+            }
+        return normalized
 
     def _save_template_payload(payload: dict) -> tuple[dict | None, dict | None]:
         safe_name = _template_name(payload.get("name"))
@@ -1444,6 +1465,7 @@ def create_app() -> Flask:
                 "mirror": options.mirror,
                 "include_print_marks": options.include_print_marks,
                 "include_cut_lines": options.include_cut_lines,
+                "include_yellow_unifier": options.include_yellow_unifier,
                 "include_curve_effect": options.include_curve_effect,
                 "curve_device": options.curve_device,
                 "curve_diameter": options.curve_diameter,
@@ -1728,6 +1750,7 @@ def create_app() -> Flask:
             panel_text=_panel_text_options(options, page_size[1]),
             print_marks=options.include_print_marks,
             cut_lines=options.include_cut_lines,
+            yellow_unifier=options.include_yellow_unifier,
             curve_settings=_curve_settings(options),
             metadata=metadata,
             one_layout_per_page=True,

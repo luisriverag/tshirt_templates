@@ -153,6 +153,17 @@ def _font_name(font_key: str) -> str:
     return "Helvetica-Bold"
 
 
+def _draw_yellow_unifier_layer(pdf: canvas.Canvas, x: float, y: float, width: float, height: float) -> None:
+    """Draw a translucent yellow wash over a badge to even out yellow tones."""
+
+    pdf.saveState()
+    if hasattr(pdf, "setFillAlpha"):
+        pdf.setFillAlpha(0.28)
+    pdf.setFillColor(colors.HexColor("#ffd84d"))
+    pdf.roundRect(x, y, width, height, min(width, height) * 0.18, stroke=0, fill=1)
+    pdf.restoreState()
+
+
 def _draw_cut_line(pdf: canvas.Canvas, x: float, y: float, width: float, height: float) -> None:
     """Draw a subtle dashed outline around a badge for hand cutting."""
 
@@ -336,6 +347,7 @@ def render_pdf(
     panel_text: dict[str, str] | None = None,
     print_marks: bool = False,
     cut_lines: bool = False,
+    yellow_unifier: bool = False,
     curve_settings: dict[str, float] | None = None,
     metadata: dict[str, str] | None = None,
     one_layout_per_page: bool = False,
@@ -401,6 +413,14 @@ def render_pdf(
                     placement.width,
                     placement.height,
                     cached_asset,
+                )
+            if yellow_unifier:
+                _draw_yellow_unifier_layer(
+                    pdf,
+                    -placement.width / 2,
+                    -placement.height / 2,
+                    placement.width,
+                    placement.height,
                 )
             if cut_lines:
                 _draw_cut_line(pdf, -placement.width / 2, -placement.height / 2, placement.width, placement.height)

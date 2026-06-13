@@ -12,7 +12,7 @@ This application is a Flask-based generator for printable t-shirt sublimation ba
 - **SVG to PDF rendering:** svglib with ReportLab graphics.
 - **Raster image rendering:** Pillow-backed ReportLab image readers.
 - **HTTP client:** requests for upstream badge discovery and PDF asset fetching.
-- **Frontend:** Server-rendered Jinja templates, plain CSS, inline browser JavaScript for dynamic controls, badge-card ordering, and manual preview placement.
+- **Frontend:** Server-rendered Jinja templates, plain CSS, inline browser JavaScript for dynamic controls, badge-card ordering, saved design templates, and manual preview placement.
 
 ## Application Entry Points
 
@@ -206,6 +206,7 @@ Option parsing is intentionally defensive. Invalid values are normalized to know
 - Order: `selected`.
 - Mirror: enabled by default.
 - Print marks: disabled by default.
+- Yellow unifier layer: disabled by default.
 - Curved mug/canteen adapter effect: disabled by default.
 - Curve device preset: `custom` by default, with `mug`, `skinny-tumbler`, and `canteen` presets as diameter starting points.
 - Curve diameter: `8.0 cm`, clamped between `2.5–50 cm` or `1–20 in` depending on the selected unit.
@@ -214,11 +215,11 @@ Size and spacing use preset selector values instead of arbitrary numbers. Preset
 
 ### Print Marks and PDF Metadata
 
-Users can download a calibration PDF with centimeter/inch rulers and mirror guidance to verify print scale. Users can also enable optional badge cut-line outlines, crop/registration marks, and mug/canteen curved-adapter output in generated PDFs. Template PDFs intentionally omit automatic page headers, panel labels, and page numbers; only explicit front/back text entered by the user is drawn as panel text. The PDF renderer also writes selected layout options into PDF subject/keyword metadata so exported files retain the page, layout, mirror, logo, text-font, cut-line, curve-effect, curve-device, curve-diameter, and print-mark settings used to generate them.
+Users can download a calibration PDF with centimeter/inch rulers and mirror guidance to verify print scale. Users can also enable optional badge cut-line outlines, crop/registration marks, a translucent yellow unifier layer, and mug/canteen curved-adapter output in generated PDFs. Template PDFs intentionally omit automatic page headers, panel labels, and page numbers; only explicit front/back text entered by the user is drawn as panel text. The PDF renderer also writes selected layout options into PDF subject/keyword metadata so exported files retain the page, layout, mirror, logo, text-font, cut-line, yellow-unifier, curve-effect, curve-device, curve-diameter, and print-mark settings used to generate them.
 
 ## API and MCP Serialization
 
-The API implementation serializes badges, panel layouts, placements, layout-mode labels, and layout-mode behavior details with both selected display units and raw PDF point values. JSON layout requests also accept optional manual placement overrides addressed by layout and placement indexes. Saved template files are stored under the configured Flask `TEMPLATE_FOLDER` as safe-name JSON files containing `badge_ids`, `options`, optional `manual_placements`, and created/updated timestamps. The CLI `serve` command starts the same Flask app that serves the browser UI, `/api/v1`, and `/mcp`; the CLI `generate-pdf` command uses the same JSON request shape as `/api/v1/pdfs`. The MCP endpoint reuses the same serializers through `get_options`, `list_badges`, and `compute_layout` tools, and mirrors saved template file operations through `list_saved_templates`, `save_template`, `get_saved_template`, and `delete_saved_template`.
+The API implementation serializes badges, panel layouts, placements, layout-mode labels, and layout-mode behavior details with both selected display units and raw PDF point values. JSON layout requests also accept optional manual placement overrides addressed by layout and placement indexes. Saved template files are stored under the configured Flask `TEMPLATE_FOLDER` as safe-name JSON files containing `badge_ids`, optional browser `side_badge_ids`, `options`, optional `manual_placements`, and created/updated timestamps. The browser generator can save the current badge assignments/options and load or delete those design templates through the same JSON API. The CLI `serve` command starts the same Flask app that serves the browser UI, `/api/v1`, and `/mcp`; the CLI `generate-pdf` command uses the same JSON request shape as `/api/v1/pdfs`. The MCP endpoint reuses the same serializers through `get_options`, `list_badges`, and `compute_layout` tools, and mirrors saved template file operations through `list_saved_templates`, `save_template`, `get_saved_template`, and `delete_saved_template`.
 
 ## Testing Strategy
 

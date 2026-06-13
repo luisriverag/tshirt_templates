@@ -47,6 +47,37 @@
       {% endif %}
 
       <form class="generator" method="post" action="/preview" enctype="multipart/form-data">
+
+        <section class="panel template-library" aria-labelledby="template-library-title">
+          <div class="section-heading">
+            <h2 id="template-library-title">Saved design templates</h2>
+            <span><span id="saved-template-count">{{ saved_templates|length }}</span> saved</span>
+          </div>
+          <div class="context-help">
+            <span>Template library help</span>
+            {{ info_hint("Save the current badge assignments and print options as a reusable design template. Load a saved template to restore those choices before previewing or downloading a PDF.") }}
+          </div>
+          <div class="control-grid template-library-grid">
+            <label>Template name
+              <input type="text" id="template-name" maxlength="80" placeholder="team-shirt">
+            </label>
+            <label>Load saved template
+              <select id="saved-template-select">
+                <option value="">Choose a saved template</option>
+                {% for template in saved_templates %}
+                  <option value="{{ template.name }}">{{ template.name }} · {{ template.badge_count }} badge{{ '' if template.badge_count == 1 else 's' }}</option>
+                {% endfor %}
+              </select>
+            </label>
+          </div>
+          <div class="template-actions" aria-label="Saved template actions">
+            <button type="button" class="secondary-button" id="save-design-template">Save current design</button>
+            <button type="button" class="secondary-button" id="load-design-template">Load selected design</button>
+            <button type="button" class="secondary-button" id="delete-design-template">Delete selected design</button>
+          </div>
+          <p class="template-library-status" id="template-library-status" role="status" aria-live="polite">Saved templates stay on this server under the configured template folder.</p>
+        </section>
+
         <section class="panel">
           <div class="section-heading">
             <h2>Badges</h2>
@@ -301,6 +332,8 @@
                 <input type="hidden" name="include_print_marks" value="off">
                 <label class="inline"><input type="checkbox" name="include_cut_lines" value="on"> Add badge cut-line outlines</label>
                 <input type="hidden" name="include_cut_lines" value="off">
+                <label class="inline"><input type="checkbox" name="include_yellow_unifier" value="on"> Add yellow unifier layer</label>
+                <input type="hidden" name="include_yellow_unifier" value="off">
               </div>
             </fieldset>
 
@@ -341,6 +374,11 @@
       const selectedBadgeCount = document.querySelector('#selected-badge-count');
       const visibleBadgeCount = document.querySelector('#visible-badge-count');
       const sideSelectionNotice = document.querySelector('#side-selection-notice');
+      const generatorForm = document.querySelector('.generator');
+      const templateNameInput = document.querySelector('#template-name');
+      const savedTemplateSelect = document.querySelector('#saved-template-select');
+      const savedTemplateCount = document.querySelector('#saved-template-count');
+      const templateLibraryStatus = document.querySelector('#template-library-status');
       const badgeSizeOptions = {{ badge_size_options|tojson }};
       const spacingOptions = {{ spacing_options|tojson }};
       const logoSizeOptions = {{ logo_size_options|tojson }};
@@ -459,6 +497,201 @@
         sideSelectionNotice.classList.toggle('warning', warnings.length > 0);
       }
 
+      const scalarTemplateFields = [
+        'page_size',
+        'orientation',
+        'mode',
+        'order',
+        'unit',
+        'badge_size',
+        'spacing',
+        'page_margin',
+        'panel_gap',
+        'logo_size',
+        'front_logo_size',
+        'back_logo_size',
+        'copies',
+        'curve_device',
+        'curve_diameter',
+        'front_text',
+        'back_text',
+        'text_font',
+        'text_size',
+      ];
+      const booleanTemplateFields = [
+        'mirror',
+        'include_print_marks',
+        'include_cut_lines',
+        'include_yellow_unifier',
+        'include_curve_effect',
+      ];
+
+      function setTemplateStatus(message, isWarning = false) {
+        templateLibraryStatus.textContent = message;
+        templateLibraryStatus.classList.toggle('warning', isWarning);
+      }
+
+      function selectedValues(name) {
+        return [...generatorForm.querySelectorAll(`input[type="checkbox"][name="${name}"]:checked`)].map((input) => input.value);
+      }
+
+      function selectedBadgeIdsForSide(side) {
+        const fieldName = `${side}_badges`;
+        return [...badgeGrid.querySelectorAll('.badge-card')]
+          .filter((card) => card.querySelector(`input[name="${fieldName}"]`).checked)
+          .map((card) => card.querySelector(`input[name="${fieldName}"]`).value);
+      }
+
+      function uniqueValues(values) {
+        return values.filter((value, index) => value && values.indexOf(value) === index);
+      }
+
+      function currentDesignTemplate() {
+        const options = {};
+        scalarTemplateFields.forEach((name) => {
+          const field = generatorForm.elements[name];
+          if (field) options[name] = field.value;
+        });
+        booleanTemplateFields.forEach((name) => {
+          options[name] = selectedValues(name).includes('on');
+        });
+        options.sides = selectedValues('sides');
+        options.logo_sides = selectedValues('logo_sides');
+        const frontBadgeIds = selectedBadgeIdsForSide('front');
+        const backBadgeIds = selectedBadgeIdsForSide('back');
+        return {
+          badge_ids: uniqueValues([...frontBadgeIds, ...backBadgeIds]),
+          side_badge_ids: { front: frontBadgeIds, back: backBadgeIds },
+          options,
+          manual_placements: [],
+        };
+      }
+
+      function upsertSavedTemplateOption(name, badgeCount) {
+        let option = [...savedTemplateSelect.options].find((item) => item.value === name);
+        if (!option) {
+          option = document.createElement('option');
+          option.value = name;
+          savedTemplateSelect.appendChild(option);
+          savedTemplateCount.textContent = String(Number(savedTemplateCount.textContent || 0) + 1);
+        }
+        option.textContent = `${name} · ${badgeCount} badge${badgeCount === 1 ? '' : 's'}`;
+        savedTemplateSelect.value = name;
+      }
+
+      async function saveCurrentDesignTemplate() {
+        const name = templateNameInput.value.trim() || savedTemplateSelect.value;
+        if (!name) {
+          setTemplateStatus('Enter a template name before saving this design.', true);
+          templateNameInput.focus();
+          return;
+        }
+        const response = await fetch('/api/v1/templates', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name, template: currentDesignTemplate() }),
+        });
+        const payload = await response.json();
+        if (!response.ok) {
+          setTemplateStatus(payload.error?.message || 'Template could not be saved.', true);
+          return;
+        }
+        const badgeCount = payload.template?.badge_ids?.length || 0;
+        upsertSavedTemplateOption(payload.name, badgeCount);
+        templateNameInput.value = payload.name;
+        setTemplateStatus(`Saved template “${payload.name}”.`);
+      }
+
+      function setCheckboxValues(name, values) {
+        const selected = new Set(values || []);
+        generatorForm.querySelectorAll(`input[type="checkbox"][name="${name}"]`).forEach((input) => {
+          input.checked = selected.has(input.value);
+        });
+      }
+
+      function setBooleanOption(name, value) {
+        generatorForm.querySelectorAll(`input[type="checkbox"][name="${name}"]`).forEach((input) => {
+          input.checked = Boolean(value) && input.value === 'on';
+        });
+      }
+
+      function setScalarOption(name, value) {
+        if (value === undefined || value === null) return;
+        const field = generatorForm.elements[name];
+        if (!field) return;
+        field.value = String(value);
+      }
+
+      function applyTemplateToForm(template) {
+        const options = template.options || {};
+        if (options.unit) {
+          unitSelect.value = options.unit;
+          updateAmountSelectors();
+        }
+        scalarTemplateFields.forEach((name) => setScalarOption(name, options[name]));
+        booleanTemplateFields.forEach((name) => setBooleanOption(name, options[name]));
+        setCheckboxValues('sides', options.sides || ['front', 'back']);
+        setCheckboxValues('logo_sides', options.logo_sides || []);
+        const sideBadgeIds = template.side_badge_ids || { front: template.badge_ids || [], back: template.badge_ids || [] };
+        const frontIds = new Set(sideBadgeIds.front || []);
+        const backIds = new Set(sideBadgeIds.back || []);
+        badgeGrid.querySelectorAll('.badge-card').forEach((card) => {
+          const frontInput = card.querySelector('input[name="front_badges"]');
+          const backInput = card.querySelector('input[name="back_badges"]');
+          frontInput.checked = frontIds.has(frontInput.value);
+          backInput.checked = backIds.has(backInput.value);
+        });
+        [pageMarginInput, panelGapInput, curveDiameterInput, textSizeInput].forEach(normalizeNumberInput);
+        updateCurveHelper();
+        filterBadges();
+      }
+
+      async function loadSelectedDesignTemplate() {
+        const name = savedTemplateSelect.value || templateNameInput.value.trim();
+        if (!name) {
+          setTemplateStatus('Choose a saved template to load.', true);
+          savedTemplateSelect.focus();
+          return;
+        }
+        const response = await fetch(`/api/v1/templates/${encodeURIComponent(name)}`);
+        const payload = await response.json();
+        if (!response.ok) {
+          setTemplateStatus(payload.error?.message || 'Template could not be loaded.', true);
+          return;
+        }
+        applyTemplateToForm(payload.template || {});
+        templateNameInput.value = payload.name || name;
+        savedTemplateSelect.value = payload.name || name;
+        setTemplateStatus(`Loaded template “${payload.name || name}”.`);
+      }
+
+      async function deleteSelectedDesignTemplate() {
+        const name = savedTemplateSelect.value || templateNameInput.value.trim();
+        if (!name) {
+          setTemplateStatus('Choose a saved template to delete.', true);
+          return;
+        }
+        const response = await fetch(`/api/v1/templates/${encodeURIComponent(name)}`, { method: 'DELETE' });
+        const payload = await response.json();
+        if (!response.ok) {
+          setTemplateStatus(payload.error?.message || 'Template could not be deleted.', true);
+          return;
+        }
+        [...savedTemplateSelect.options].forEach((option) => {
+          if (option.value === payload.deleted) option.remove();
+        });
+        savedTemplateCount.textContent = String(Math.max(0, Number(savedTemplateCount.textContent || 0) - 1));
+        if (templateNameInput.value === payload.deleted) templateNameInput.value = '';
+        setTemplateStatus(`Deleted template “${payload.deleted}”.`);
+      }
+
+      document.querySelector('#save-design-template').addEventListener('click', saveCurrentDesignTemplate);
+      document.querySelector('#load-design-template').addEventListener('click', loadSelectedDesignTemplate);
+      document.querySelector('#delete-design-template').addEventListener('click', deleteSelectedDesignTemplate);
+      savedTemplateSelect.addEventListener('change', () => {
+        if (savedTemplateSelect.value) templateNameInput.value = savedTemplateSelect.value;
+      });
+
       curveDeviceSelect.addEventListener('change', updateAmountSelectors);
       [pageMarginInput, panelGapInput, curveDiameterInput, textSizeInput].forEach((input) => {
         input.addEventListener('change', () => {
@@ -468,7 +701,7 @@
       });
       curveDiameterInput.addEventListener('input', updateCurveHelper);
       unitSelect.addEventListener('change', updateAmountSelectors);
-      document.querySelector('.generator').addEventListener('submit', () => {
+      generatorForm.addEventListener('submit', () => {
         [pageMarginInput, panelGapInput, curveDiameterInput, textSizeInput].forEach(normalizeNumberInput);
       });
       updateAmountSelectors();
